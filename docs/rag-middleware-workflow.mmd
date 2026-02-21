@@ -1,0 +1,50 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant Assistant as Agent
+    participant CtxFactory as IAssistantContextFactory
+    participant MW1 as RetrievalMiddleware
+    participant MW2 as PromptAugmentationMiddleware
+    participant MW3 as GuardrailsMiddleware
+    participant Retriever as Vector/Keyword Store
+    participant Model as IAssistantModel
+    participant Memory as IMemoryService
+
+    User->>Assistant: ReplyAsync(question)
+
+    alt First call only
+        Assistant->>Memory: InitializeAsync()
+        Memory-->>Assistant: initialized
+    end
+
+    Assistant->>CtxFactory: Create(input, history)
+    CtxFactory-->>Assistant: AssistantContext
+
+    Note over Assistant,MW1: Request path runs in registration order
+
+    Assistant->>MW1: InvokeAsync(context, next)
+    MW1->>Retriever: RetrieveRelevantAsync(query)
+    Retriever-->>MW1: topK chunks
+    MW1->>MW2: next(context)
+
+    MW2->>MW2: Inject chunks into context.WorkingMessages
+    MW2->>MW3: next(context)
+
+    MW3->>MW3: Validate relevance/citation policy
+    MW3->>Model: CompleteAsync(context.WorkingMessages)
+    Model-->>MW3: AssistantResponse
+
+    Note over Model,Assistant: Response path unwinds in reverse order
+
+    MW3-->>MW2: AssistantResponse
+    MW2-->>MW1: AssistantResponse
+    MW1-->>Assistant: AssistantResponse
+
+    Assistant->>Assistant: Append User + Assistant messages to History
+
+    opt Memory configured
+        Assistant->>Memory: StoreMessageAsync(user)
+        Assistant->>Memory: StoreMessageAsync(answer)
+    end
+
+    Assistant-->>User: response.Content

@@ -1,0 +1,53 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant Builder as AgenticBuilder
+    participant Provider as IModelProvider
+    participant Assistant as Agent
+    participant Memory as IMemoryService
+    participant MW1 as Middleware[0]
+    participant MWn as Middleware[n]
+    participant Model as IAssistantModel
+
+    User->>Builder: WithModelProvider(provider)
+    User->>Builder: WithMemory(memory) (optional)
+    User->>Builder: UseMiddleware(mw1), UseMiddleware(mw2)... (optional)
+    User->>Builder: Build()
+
+    Builder->>Provider: CreateModel()
+    Provider-->>Builder: model
+
+    alt Memory configured and no MemoryMiddleware already added
+        Builder->>Builder: Insert MemoryMiddleware at pipeline index 0
+    end
+
+    Builder-->>User: Agent(model, memory?, pipeline)
+
+    User->>Assistant: ReplyAsync(input)
+
+    alt First call only
+        Assistant->>Memory: InitializeAsync()
+        Memory-->>Assistant: initialized
+    end
+
+    Assistant->>Assistant: Create AssistantContext(input, history)
+    Assistant->>Assistant: handler = model.CompleteAsync(...)
+    Assistant->>Assistant: Wrap handler using middlewares in reverse
+
+    Note over Assistant,MW1: Execution order is registration order on request path
+
+    Assistant->>MW1: InvokeAsync(context, next)
+    MW1->>MWn: InvokeAsync(context, next)
+    MWn->>Model: CompleteAsync(context.WorkingMessages)
+    Model-->>MWn: AssistantResponse
+    MWn-->>MW1: AssistantResponse
+    MW1-->>Assistant: AssistantResponse
+
+    Assistant->>Assistant: Append user + assistant messages to History
+
+    opt Memory configured
+        Assistant->>Memory: StoreMessageAsync(user)
+        Assistant->>Memory: StoreMessageAsync(assistant)
+    end
+
+    Assistant-->>User: response.Content
