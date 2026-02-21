@@ -68,7 +68,6 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
 
         if (tokens.Length == 0)
         {
-            // nothing to match; just grab the last <topK> messages
             var cmd0 = _connection!.CreateCommand();
             cmd0.CommandText = "SELECT content FROM memory ORDER BY rowid DESC LIMIT $limit";
             cmd0.Parameters.AddWithValue("$limit", topK);

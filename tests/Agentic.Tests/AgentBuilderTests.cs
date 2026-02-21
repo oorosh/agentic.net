@@ -307,6 +307,30 @@ public class AgentBuilderTests
         }
     }
 
+    [Fact]
+    public async Task ReplyAsync_executes_tool_calls_until_final_answer()
+    {
+        var assistant = new AgentBuilder()
+            .WithModelProvider(new TestModelProvider(new ToolCallingModel()))
+            .WithTool(new UppercaseTool())
+            .Build();
+
+        var response = await assistant.ReplyAsync("please shout hello world");
+
+        Assert.Equal("Tool says: HELLO WORLD", response);
+    }
+
+    [Fact]
+    public void Build_throws_when_duplicate_tool_names_registered()
+    {
+        var builder = new AgentBuilder()
+            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .WithTool(new UppercaseTool())
+            .WithTool(new UppercaseTool());
+
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
+    }
+
     private sealed class RecordingMiddleware : IAssistantMiddleware
     {
         private readonly string _name;
@@ -335,6 +359,39 @@ public class AgentBuilderTests
             // echo all messages in single string
             var combined = string.Join("|", messages.Select(m => m.Content));
             return Task.FromResult(new AgentResponse(combined));
+        }
+    }
+
+    private sealed class ToolCallingModel : IAgentModel
+    {
+        public Task<AgentResponse> CompleteAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+        {
+            var lastTool = messages.LastOrDefault(m => m.Role == ChatRole.Tool);
+            if (lastTool is not null)
+            {
+                var result = lastTool.Content.Split(':', 2)[1].Trim();
+                return Task.FromResult(new AgentResponse($"Tool says: {result}"));
+            }
+
+            var lastUser = messages.Last(m => m.Role == ChatRole.User).Content;
+            var text = lastUser.Replace("please shout", string.Empty, StringComparison.OrdinalIgnoreCase).Trim();
+            var toolCalls = new List<AgentToolCall>
+            {
+                new("uppercase", text)
+            };
+
+            return Task.FromResult(new AgentResponse("Calling tool", toolCalls));
+        }
+    }
+
+    private sealed class UppercaseTool : ITool
+    {
+        public string Name => "uppercase";
+        public string Description => "Uppercases input text.";
+
+        public Task<string> InvokeAsync(string arguments, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(arguments.ToUpperInvariant());
         }
     }
 

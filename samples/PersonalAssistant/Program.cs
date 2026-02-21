@@ -21,9 +21,6 @@ var memoryPath = "memory.db";
 using var memoryService = new SqliteMemoryService(memoryPath);
 await memoryService.InitializeAsync();
 
-// query the database now so that the first call to ReplyAsync will
-// have some history to work with.  we don't print the lines – they are
-// injected into the context by MemoryMiddleware later on.
 var restored = await memoryService.RetrieveRelevantAsync(string.Empty, topK: 100);
 if (restored.Count > 0)
 {

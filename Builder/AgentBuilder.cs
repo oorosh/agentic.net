@@ -10,6 +10,7 @@ public sealed class AgentBuilder
     private IMemoryService? _memoryService;
     private IAssistantContextFactory? _contextFactory;
     private readonly List<IAssistantMiddleware> _middlewares = [];
+    private readonly List<ITool> _tools = [];
 
     public AgentBuilder WithModelProvider(IModelProvider modelProvider)
     {
@@ -35,6 +36,18 @@ public sealed class AgentBuilder
         return this;
     }
 
+    public AgentBuilder WithTool(ITool tool)
+    {
+        _tools.Add(tool);
+        return this;
+    }
+
+    public AgentBuilder WithTools(IEnumerable<ITool> tools)
+    {
+        _tools.AddRange(tools);
+        return this;
+    }
+
     public Agent Build()
     {
         if (_modelProvider is null)
@@ -49,10 +62,20 @@ public sealed class AgentBuilder
             pipeline.Insert(0, new MemoryMiddleware(_memoryService));
         }
 
+        var toolLookup = new Dictionary<string, ITool>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tool in _tools)
+        {
+            if (!toolLookup.TryAdd(tool.Name, tool))
+            {
+                throw new InvalidOperationException($"Tool '{tool.Name}' is registered more than once.");
+            }
+        }
+
         return new Agent(
             _modelProvider.CreateModel(),
             _memoryService,
             _contextFactory ?? new DefaultAssistantContextFactory(),
-            pipeline);
+            pipeline,
+            toolLookup);
     }
 }

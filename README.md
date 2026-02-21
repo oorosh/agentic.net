@@ -12,6 +12,7 @@ A lightweight .NET library for building personal assistant workflows around an L
 
 - `IAssistantModel` abstraction for model completion
 - `IModelProvider` factory integration via fluent builder
+- `ITool` support with model-driven tool calls
 - `IAssistantContextFactory` for custom context creation before middleware execution
 - Middleware pipeline (`IAssistantMiddleware`) around model execution
 - Optional memory integration (`IMemoryService`)
@@ -92,6 +93,7 @@ Three runnable console samples are included:
 
 - `samples/BasicChat` — minimal assistant with a simple echo model
 - `samples/MemoryAndMiddleware` — assistant with `InMemoryMemoryService` + custom middleware
+- `samples/ToolCalling` — assistant with one registered tool (`get_weather`) invoked by model tool calls
 - `samples/PersonalAssistant` — example using the real OpenAI Chat API and a persistent
   SQLite-backed memory service (`SqliteMemoryService` in `Core/`).  The
 the program loads any stored conversation into the assistant’s context on
@@ -104,6 +106,7 @@ Run them with:
 ```bash
 dotnet run --project samples/BasicChat/BasicChat.csproj
 dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
+dotnet run --project samples/ToolCalling/ToolCalling.csproj
 # be sure to set OPENAI_API_KEY first
 dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
 ```
@@ -112,7 +115,8 @@ dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
 
 - If you pass `WithMemory(...)`, `AgenticBuilder` auto-adds `MemoryMiddleware` unless you already registered one.
 - If you need custom initial context shape (for specialized implementations), register `WithContextFactory(...)`.
-- `ITool` and `IChannel` are defined for future integrations, but no built-in tool runner/channel implementation is included yet.
+- Register tools with `WithTool(...)` / `WithTools(...)`; if a model returns tool calls, `Agent` executes them and re-prompts the model.
+- `IChannel` is defined for future transport integrations.
 
 ## Custom Context Factory Example
 
