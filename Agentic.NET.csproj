@@ -13,9 +13,9 @@
     <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
     <PackageId>Agentic.NET</PackageId>
     <!-- use a prerelease version to keep the package in "preview" state -->
-    <Version>0.1.0-preview1</Version>
+    <Version>0.1.1-preview</Version>
     <Authors>Uros Biberdzic</Authors>
-    <Description>Lightweight .NET library for building AI assistant workflows with model abstraction, middleware, memory, and tool calling.</Description>
+    <Description>Create AI assistants in .NET with pluggable models, memory, middleware, and tools.</Description>
     <PackageProjectUrl>https://github.com/oorosh/agentic.net</PackageProjectUrl>
     <PackageTags>ai assistant llm tool-calling middleware memory</PackageTags>
     <PackageReleaseNotes>Initial public package release.</PackageReleaseNotes>

@@ -1,10 +1,8 @@
 # Agentic.NET NuGet Package
 
-Agentic.NET is a lightweight .NET library for building AI assistant features
-inside your own applications. It gives you a small runtime that combines
-model abstraction (`IAgentModel`), middleware, optional memory, and tool
-calling so you can compose assistant workflows without coupling your app to a
-single provider.
+Create AI assistants in .NET with pluggable models, memory, middleware, and
+tool calling. Agentic.NET gives you a small runtime to compose assistant
+workflows without coupling your app to a single provider.
 
 This README is kept short for NuGet users; full documentation and samples are
 available in the GitHub repository.
@@ -12,7 +10,7 @@ available in the GitHub repository.
 ## Install
 
 ```bash
-dotnet add package Agentic.NET --version 0.1.0-preview1
+dotnet add package Agentic.NET --version 0.1.1-preview
 ```
 
 ## Quick example

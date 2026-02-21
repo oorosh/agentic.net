@@ -2,7 +2,7 @@
 
 ![Agentic.NET logo](icon.png)
 
-Agentic.NET is a lightweight .NET library and NuGet package for building AI assistant functionality into any .NET application.
+Create AI assistants in .NET with pluggable models, memory, middleware, and tools.
 
 The library exposes a minimal runtime with:
 
@@ -30,8 +30,8 @@ The library targets `net10.0` (C# 12) and is compatible with current stable .NET
 The package is published on nuget.org and can be added by running:
 
 ```bash
-# pick the version you want; 0.1.0 is current
-dotnet add package Agentic.NET --version 0.1.0-preview1 (preview release)
+# pick the version you want; 0.1.1-preview is current
+dotnet add package Agentic.NET --version 0.1.1-preview (preview release)
 ```
 
 NuGet clients (Visual Studio, Rider, CLI) will pull the compiled library and dependencies automatically.
