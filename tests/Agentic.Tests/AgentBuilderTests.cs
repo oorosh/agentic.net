@@ -296,7 +296,7 @@ public class AgentBuilderTests
             var resp = await memMw.InvokeAsync(ctx, dummy);
             Assert.True(called);
             // because there was no history we should have inserted a system message
-            Assert.True(ctx.WorkingMessages.Any(m => m.Role == ChatRole.System));
+            Assert.Contains(ctx.WorkingMessages, m => m.Role == ChatRole.System);
             var sys = ctx.WorkingMessages.First(m => m.Role == ChatRole.System).Content;
             Assert.Contains("foo", sys);
             Assert.Contains("bar", sys);
