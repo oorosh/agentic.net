@@ -19,6 +19,7 @@
     <Copyright>Copyright (c) Uros Biberdzic 2026</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/oorosh/agentic.net</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -42,6 +43,7 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="LICENSE" Pack="true" PackagePath="\" />
+    <None Include="icon.png" Pack="true" PackagePath="\" />
     <None Update="samples/**" Pack="false" />
     <None Update="tests/**" Pack="false" />
   </ItemGroup>
