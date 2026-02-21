@@ -9,6 +9,8 @@
     <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)/obj/</BaseIntermediateOutputPath>
     <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/$(TargetFramework)/</IntermediateOutputPath>
     <IsPackable>true</IsPackable>
+    <!-- suppress RID-specific warnings from dependencies (NETSDK1206) -->
+    <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
     <PackageId>Agentic.NET</PackageId>
     <Version>0.1.0</Version>
     <Authors>Uros Biberdzic</Authors>
