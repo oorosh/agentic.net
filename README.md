@@ -1,5 +1,7 @@
 # Agentic.NET
 
+![Agentic.NET logo](icon.png)
+
 Agentic.NET is a lightweight .NET library for building AI assistants in your own applications.
 
 It provides a small runtime around:
