@@ -2,15 +2,16 @@
 
 ![Agentic.NET logo](icon.png)
 
-Agentic.NET is a lightweight .NET library for building AI assistants in your own applications.
+Agentic.NET is a lightweight .NET library and NuGet package for building AI assistant functionality into any .NET application.
 
-It provides a small runtime around:
-- a model interface (`IAgentModel`)
-- optional memory (`IMemoryService`)
-- middleware (`IAssistantMiddleware`)
-- tool calling (`ITool`)
+The library exposes a minimal runtime with:
 
-The goal is simple: keep your app code in control while giving you clean building blocks for assistant workflows.
+- `IAgentModel` abstraction for the underlying LLM or chat model
+- optional memory (`IMemoryService`) with built-in SQLite and in‑memory providers
+- middleware hooks (`IAssistantMiddleware`) to preprocess or postprocess conversation
+- a tool‑calling mechanism (`ITool`) that the model can invoke
+
+Designed for clarity and composability, the API lets your app stay in control while leveraging AI logic.
 
 ## What this project is
 
@@ -20,17 +21,22 @@ Use Agentic.NET when you want to:
 - add custom business tools the model can call
 - plug memory and middleware into the request pipeline
 
-This repository currently targets `net10.0` and C# preview.
+The library targets `net10.0` (C# 12) and is compatible with current stable .NET.
 
 ## Install
 
-### Option 1: NuGet (recommended for app projects)
+### NuGet (recommended for application developers)
+
+The package is published on nuget.org and can be added by running:
 
 ```bash
-dotnet add package Agentic.NET
+# pick the version you want; 0.1.0 is current
+dotnet add package Agentic.NET --version 0.1.0-preview1 (preview release)
 ```
 
-### Option 2: Project reference (recommended for local development)
+NuGet clients (Visual Studio, Rider, CLI) will pull the compiled library and dependencies automatically.
+
+### Local project reference (for contributors)
 
 ```bash
 dotnet add <YourApp>.csproj reference ../agentic.net/Agentic.NET.csproj

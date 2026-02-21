@@ -12,7 +12,8 @@
     <!-- suppress RID-specific warnings from dependencies (NETSDK1206) -->
     <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
     <PackageId>Agentic.NET</PackageId>
-    <Version>0.1.0</Version>
+    <!-- use a prerelease version to keep the package in "preview" state -->
+    <Version>0.1.0-preview1</Version>
     <Authors>Uros Biberdzic</Authors>
     <Description>Lightweight .NET library for building AI assistant workflows with model abstraction, middleware, memory, and tool calling.</Description>
     <PackageProjectUrl>https://github.com/oorosh/agentic.net</PackageProjectUrl>
@@ -20,7 +21,7 @@
     <PackageReleaseNotes>Initial public package release.</PackageReleaseNotes>
     <Copyright>Copyright (c) Uros Biberdzic 2026</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReadmeFile>README.pkg.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/oorosh/agentic.net</RepositoryUrl>
