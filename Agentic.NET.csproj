@@ -8,10 +8,28 @@
     <RootNamespace>Agentic</RootNamespace>
     <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)/obj/</BaseIntermediateOutputPath>
     <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/$(TargetFramework)/</IntermediateOutputPath>
+    <IsPackable>true</IsPackable>
+    <PackageId>Agentic.NET</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Uros Biberdzic</Authors>
+    <Description>Lightweight .NET library for building AI assistant workflows with model abstraction, middleware, memory, and tool calling.</Description>
+    <PackageProjectUrl>https://github.com/oorosh/agentic.net</PackageProjectUrl>
+    <PackageTags>ai assistant llm tool-calling middleware memory</PackageTags>
+    <PackageReleaseNotes>Initial public package release.</PackageReleaseNotes>
+    <Copyright>Copyright (c) Uros Biberdzic 2026</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/oorosh/agentic.net</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>false</IncludeSymbols>
+    <IncludeSource>false</IncludeSource>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="7.0.11" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,6 +37,13 @@
     <None Include="samples/**/*.cs" />
     <Compile Remove="tests/**/*.cs" />
     <None Include="tests/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="LICENSE" Pack="true" PackagePath="\" />
+    <None Update="samples/**" Pack="false" />
+    <None Update="tests/**" Pack="false" />
   </ItemGroup>
 
 </Project>
