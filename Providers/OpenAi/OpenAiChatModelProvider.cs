@@ -140,8 +140,8 @@ internal sealed class OpenAiChatModel : IAgentModel
 
             return new
             {
-                role = "system",
-                content = $"Tool result from {toolName}: {toolResult}"
+                role = "assistant",
+                content = $"Tool '{toolName}' returned: {toolResult}. Use this result to answer the user."
             };
         }
 

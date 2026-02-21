@@ -53,7 +53,7 @@ public sealed class GetWeatherTool : ITool
     public Task<string> InvokeAsync(string arguments, CancellationToken cancellationToken = default)
     {
         var city = string.IsNullOrWhiteSpace(arguments) ? "Belgrade" : arguments;
-        var report = $"{city}: 18°C, clear sky";
+        var report = $"{city}: 5°C, clear sky";
         return Task.FromResult(report);
     }
 }

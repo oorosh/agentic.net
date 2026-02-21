@@ -321,6 +321,19 @@ public class AgentBuilderTests
     }
 
     [Fact]
+    public async Task ReplyAsync_repeated_same_tool_call_returns_last_tool_result_instead_of_throwing()
+    {
+        var assistant = new AgentBuilder()
+            .WithModelProvider(new TestModelProvider(new RepeatingToolCallingModel()))
+            .WithTool(new UppercaseTool())
+            .Build();
+
+        var response = await assistant.ReplyAsync("please shout hello world");
+
+        Assert.Equal("HELLO WORLD", response);
+    }
+
+    [Fact]
     public async Task ReplyAsync_includes_registered_tools_in_model_context()
     {
         IReadOnlyList<ChatMessage>? captured = null;
@@ -419,6 +432,21 @@ public class AgentBuilderTests
         public Task<AgentResponse> CompleteAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_capture(messages));
+        }
+    }
+
+    private sealed class RepeatingToolCallingModel : IAgentModel
+    {
+        public Task<AgentResponse> CompleteAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+        {
+            var lastUser = messages.Last(m => m.Role == ChatRole.User).Content;
+            var text = lastUser.Replace("please shout", string.Empty, StringComparison.OrdinalIgnoreCase).Trim();
+            var toolCalls = new List<AgentToolCall>
+            {
+                new("uppercase", text)
+            };
+
+            return Task.FromResult(new AgentResponse("Still calling tool", toolCalls));
         }
     }
 

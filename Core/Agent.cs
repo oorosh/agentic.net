@@ -5,6 +5,7 @@ namespace Agentic.Core;
 
 public sealed class Agent
 {
+    private const int MaxToolCallDepth = 12;
     private readonly IAgentModel _model;
     private readonly IMemoryService? _memoryService;
     private readonly IAssistantContextFactory _contextFactory;
@@ -68,12 +69,21 @@ public sealed class Agent
 
         var response = await handler(context, cancellationToken);
         var toolCallDepth = 0;
+        var seenToolCallSignatures = new HashSet<string>(StringComparer.Ordinal);
 
         while (response.HasToolCalls)
         {
-            if (toolCallDepth++ >= 8)
+            if (toolCallDepth++ >= MaxToolCallDepth)
             {
-                throw new InvalidOperationException("Tool call depth exceeded the maximum allowed iterations.");
+                response = new AgentResponse(BuildToolLoopFallbackResponse(context));
+                break;
+            }
+
+            var signature = BuildToolCallSignature(response.ToolCalls!);
+            if (!seenToolCallSignatures.Add(signature))
+            {
+                response = new AgentResponse(BuildToolLoopFallbackResponse(context));
+                break;
             }
 
             foreach (var toolCall in response.ToolCalls!)
@@ -86,6 +96,10 @@ public sealed class Agent
                 var toolResult = await tool.InvokeAsync(toolCall.Arguments, cancellationToken);
                 context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: {toolResult}"));
             }
+
+            context.WorkingMessages.Add(new ChatMessage(
+                ChatRole.System,
+                "Use the latest tool results to answer the user. Only call another tool if additional information is strictly required."));
 
             response = await handler(context, cancellationToken);
         }
@@ -119,5 +133,31 @@ public sealed class Agent
 
         lines.Add("If a tool is needed, return tool calls using the exact tool name and arguments.");
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string BuildToolCallSignature(IReadOnlyList<AgentToolCall> toolCalls)
+    {
+        return string.Join("|", toolCalls.Select(tc => $"{tc.Name}\u001f{tc.Arguments}"));
+    }
+
+    private static string BuildToolLoopFallbackResponse(AgentContext context)
+    {
+        var lastToolMessage = context.WorkingMessages.LastOrDefault(m => m.Role == ChatRole.Tool)?.Content;
+        if (string.IsNullOrWhiteSpace(lastToolMessage))
+        {
+            return "I couldn't complete this request because tool calling kept repeating. Please try rephrasing your question.";
+        }
+
+        var separatorIndex = lastToolMessage.IndexOf(':');
+        if (separatorIndex >= 0 && separatorIndex < lastToolMessage.Length - 1)
+        {
+            var toolResult = lastToolMessage[(separatorIndex + 1)..].Trim();
+            if (!string.IsNullOrWhiteSpace(toolResult))
+            {
+                return toolResult;
+            }
+        }
+
+        return lastToolMessage;
     }
 }
