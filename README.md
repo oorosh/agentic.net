@@ -1,6 +1,6 @@
 # Agentic.NET
 
-![Agentic.NET logo](icon.png)
+![Agentic.NET logo](logo.png)
 
 Create AI assistants in .NET with pluggable models, memory, middleware, and tools.
 
