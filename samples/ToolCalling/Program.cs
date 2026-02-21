@@ -1,9 +1,25 @@
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
+using Agentic.Providers.OpenAi;
+
+var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+if (string.IsNullOrWhiteSpace(apiKey))
+{
+    Console.WriteLine("Please set the OPENAI_API_KEY environment variable.");
+    return;
+}
 
 var assistant = new AgentBuilder()
-    .WithModelProvider(new DemoModelProvider())
+    .WithModelProvider(new OpenAiChatModelProvider(
+        apiKey,
+        tools:
+        [
+            new OpenAiFunctionToolDefinition(
+                "get_weather",
+                "Get weather for a city.",
+                [new OpenAiFunctionToolParameter("city", "string", "City name")])
+        ]))
     .WithTool(new GetWeatherTool())
     .Build();
 
@@ -27,51 +43,6 @@ while (true)
 
     var reply = await assistant.ReplyAsync(input);
     Console.WriteLine($"Assistant: {reply}\n");
-}
-
-public sealed class DemoModelProvider : IModelProvider
-{
-    public IAgentModel CreateModel() => new ToolAwareModel();
-}
-
-public sealed class ToolAwareModel : IAgentModel
-{
-    public Task<AgentResponse> CompleteAsync(
-        IReadOnlyList<ChatMessage> messages,
-        CancellationToken cancellationToken = default)
-    {
-        var lastToolMessage = messages.LastOrDefault(m => m.Role == ChatRole.Tool);
-        if (lastToolMessage is not null)
-        {
-            return Task.FromResult(new AgentResponse($"Here you go: {lastToolMessage.Content.Split(':', 2)[1].Trim()}"));
-        }
-
-        var lastUser = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Content ?? string.Empty;
-        if (lastUser.Contains("weather", StringComparison.OrdinalIgnoreCase))
-        {
-            var city = ExtractCity(lastUser);
-            var toolCalls = new List<AgentToolCall>
-            {
-                new("get_weather", city)
-            };
-
-            return Task.FromResult(new AgentResponse("I will check the weather tool.", toolCalls));
-        }
-
-        return Task.FromResult(new AgentResponse("Ask me about weather, for example: what's the weather in Belgrade?"));
-    }
-
-    private static string ExtractCity(string input)
-    {
-        const string marker = "in ";
-        var idx = input.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (idx < 0)
-        {
-            return "Belgrade";
-        }
-
-        return input[(idx + marker.Length)..].Trim(' ', '?', '.', '!');
-    }
 }
 
 public sealed class GetWeatherTool : ITool

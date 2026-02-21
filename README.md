@@ -106,6 +106,7 @@ Run them with:
 ```bash
 dotnet run --project samples/BasicChat/BasicChat.csproj
 dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
+# be sure to set OPENAI_API_KEY first
 dotnet run --project samples/ToolCalling/ToolCalling.csproj
 # be sure to set OPENAI_API_KEY first
 dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
