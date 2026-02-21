@@ -321,6 +321,29 @@ public class AgentBuilderTests
     }
 
     [Fact]
+    public async Task ReplyAsync_includes_registered_tools_in_model_context()
+    {
+        IReadOnlyList<ChatMessage>? captured = null;
+
+        var assistant = new AgentBuilder()
+            .WithModelProvider(new TestModelProvider(new CaptureModel(messages =>
+            {
+                captured = messages;
+                return new AgentResponse("ok");
+            })))
+            .WithTool(new UppercaseTool())
+            .Build();
+
+        var response = await assistant.ReplyAsync("hello");
+
+        Assert.Equal("ok", response);
+        Assert.NotNull(captured);
+        var toolSystem = captured!.FirstOrDefault(m => m.Role == ChatRole.System && m.Content.Contains("Available tools:"));
+        Assert.NotNull(toolSystem);
+        Assert.Contains("uppercase", toolSystem!.Content);
+    }
+
+    [Fact]
     public void Build_throws_when_duplicate_tool_names_registered()
     {
         var builder = new AgentBuilder()
@@ -381,6 +404,21 @@ public class AgentBuilderTests
             };
 
             return Task.FromResult(new AgentResponse("Calling tool", toolCalls));
+        }
+    }
+
+    private sealed class CaptureModel : IAgentModel
+    {
+        private readonly Func<IReadOnlyList<ChatMessage>, AgentResponse> _capture;
+
+        public CaptureModel(Func<IReadOnlyList<ChatMessage>, AgentResponse> capture)
+        {
+            _capture = capture;
+        }
+
+        public Task<AgentResponse> CompleteAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_capture(messages));
         }
     }
 

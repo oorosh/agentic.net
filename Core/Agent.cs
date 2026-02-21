@@ -53,6 +53,11 @@ public sealed class Agent
 
         var context = _contextFactory.Create(input, _history);
 
+        if (_tools.Count > 0)
+        {
+            context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, BuildToolCatalogMessage(_tools.Values)));
+        }
+
         AgentHandler handler = async (ctx, ct) => await _model.CompleteAsync(ctx.WorkingMessages.ToList(), ct);
 
         foreach (var middleware in _middlewares.Reverse())
@@ -98,5 +103,21 @@ public sealed class Agent
         }
 
         return response.Content;
+    }
+
+    private static string BuildToolCatalogMessage(IEnumerable<ITool> tools)
+    {
+        var lines = new List<string>
+        {
+            "Available tools:"
+        };
+
+        foreach (var tool in tools.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            lines.Add($"- {tool.Name}: {tool.Description}");
+        }
+
+        lines.Add("If a tool is needed, return tool calls using the exact tool name and arguments.");
+        return string.Join(Environment.NewLine, lines);
     }
 }
