@@ -1,143 +1,115 @@
 # Agentic.NET
 
-A lightweight .NET library for building personal assistant workflows around an LLM-style model, optional memory, and middleware.
+Agentic.NET is a lightweight .NET library for building AI assistants in your own applications.
 
-## Status
+It provides a small runtime around:
+- a model interface (`IAgentModel`)
+- optional memory (`IMemoryService`)
+- middleware (`IAssistantMiddleware`)
+- tool calling (`ITool`)
 
-- ✅ Project builds successfully on current source (`net10.0`, C# preview)
-- ✅ Core abstractions and assistant pipeline are implemented
-- 🚧 `Channels/` is currently empty (extension point for transports)
+The goal is simple: keep your app code in control while giving you clean building blocks for assistant workflows.
 
-## Features
+## What this project is
 
-- `IAssistantModel` abstraction for model completion
-- `IModelProvider` factory integration via fluent builder
-- `ITool` support with model-driven tool calls
-- `IAssistantContextFactory` for custom context creation before middleware execution
-- Middleware pipeline (`IAssistantMiddleware`) around model execution
-- Optional memory integration (`IMemoryService`)
-- Built-in `MemoryMiddleware` that injects relevant memory as system context
-- In-memory memory provider (`InMemoryMemoryService`) for local/dev scenarios
-- Conversation history tracked in `Agent.History`
+Use Agentic.NET when you want to:
+- add assistant/chat behavior to an existing .NET app
+- keep model providers swappable
+- add custom business tools the model can call
+- plug memory and middleware into the request pipeline
 
-## Project Structure
+This repository currently targets `net10.0` and C# preview.
 
-- `Abstractions/` — interfaces for model, memory, tool, provider, channels
-- `Core/` — assistant runtime, chat message types, in-memory memory service
-- `Middleware/` — middleware contract + memory middleware
-- `Builder/` — fluent `AgenticBuilder` composition API
+## Add it to your project
 
-## Requirements
+This repo is currently consumed as a project reference.
 
-- .NET SDK with `net10.0` support
-- C# preview language support (already configured in project)
+```bash
+dotnet add <YourApp>.csproj reference ./Agentic.NET.csproj
+```
 
-## Quick Start
+Or add this to your app `.csproj`:
+
+```xml
+<ItemGroup>
+  <ProjectReference Include="../agentic.net/Agentic.NET.csproj" />
+</ItemGroup>
+```
+
+## Minimal usage
 
 ```csharp
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
 
-var assistant = new AgenticBuilder()
+var agent = new AgentBuilder()
     .WithModelProvider(new DemoModelProvider())
-    .WithMemory(new InMemoryMemoryService())
     .Build();
 
-var reply1 = await assistant.ReplyAsync("My name is Uros and I like C#");
-var reply2 = await assistant.ReplyAsync("What do I like?");
-
-Console.WriteLine(reply1);
-Console.WriteLine(reply2);
+var reply = await agent.ReplyAsync("Hello");
+Console.WriteLine(reply);
 
 public sealed class DemoModelProvider : IModelProvider
 {
-    public IAssistantModel CreateModel() => new DemoModel();
+    public IAgentModel CreateModel() => new DemoModel();
 }
 
-public sealed class DemoModel : IAssistantModel
+public sealed class DemoModel : IAgentModel
 {
-    public Task<AssistantResponse> CompleteAsync(
+    public Task<AgentResponse> CompleteAsync(
         IReadOnlyList<ChatMessage> messages,
         CancellationToken cancellationToken = default)
     {
-        var lastUser = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Content ?? string.Empty;
-        return Task.FromResult(new AssistantResponse($"Echo: {lastUser}"));
+        var lastUser = messages.Last(m => m.Role == ChatRole.User).Content;
+        return Task.FromResult(new AgentResponse($"Echo: {lastUser}"));
     }
 }
 ```
 
-## How the Pipeline Works
+## Typical integration pattern
 
-1. `ReplyAsync(input)` auto-initializes memory if needed
-2. `AssistantContext` is created via configured `IAssistantContextFactory` (default: history + current user message)
-3. Middleware chain executes (memory middleware can prepend system memory context)
-4. Model receives `WorkingMessages` and returns an `AssistantResponse`
-5. User + assistant messages are appended to in-memory history
-6. If memory is configured, both input and response are stored
+1. Implement `IModelProvider` for your LLM backend.
+2. Build an `Agent` with `AgentBuilder`.
+3. Optionally add memory with `WithMemory(...)`.
+4. Optionally add middleware with `UseMiddleware(...)`.
+5. Optionally register tools with `WithTool(...)`.
+6. Call `ReplyAsync(...)` from your app/service/controller.
 
-Middleware execution order:
+## Key concepts
 
-- Request path: middleware runs in registration order (`mw1 -> mw2 -> model`)
-- Response path: unwinds in reverse (`model -> mw2 -> mw1`)
+- `Agent`: runtime orchestrator for model, middleware, memory, and tools.
+- `AgentContext`: current input + history + mutable working messages.
+- `IAssistantMiddleware`: pipeline steps around model execution.
+- `IMemoryService`: store/retrieve memory for context injection.
+- `ITool`: executable function the model can request.
 
-## Build
-
-```bash
-dotnet build
-```
+If memory is configured, `MemoryMiddleware` is added automatically unless you add your own memory middleware.
 
 ## Samples
 
-Three runnable console samples are included:
+- `samples/BasicChat` — minimal chat loop
+- `samples/MemoryAndMiddleware` — memory + custom middleware + context factory
+- `samples/ToolCalling` — OpenAI function-style tool calls (`get_weather`)
+- `samples/PersonalAssistant` — OpenAI + SQLite persistent memory
 
-- `samples/BasicChat` — minimal assistant with a simple echo model
-- `samples/MemoryAndMiddleware` — assistant with `InMemoryMemoryService` + custom middleware
-- `samples/ToolCalling` — assistant with one registered tool (`get_weather`) invoked by model tool calls
-- `samples/PersonalAssistant` — example using the real OpenAI Chat API and a persistent
-  SQLite-backed memory service (`SqliteMemoryService` in `Core/`).  The
-the program loads any stored conversation into the assistant’s context on
-  startup (it no longer spits the lines to the console) and the memory
-  implementation falls back to the most‑recent messages if a query doesn’t
-  produce any matches.
-
-Run them with:
+Run:
 
 ```bash
 dotnet run --project samples/BasicChat/BasicChat.csproj
 dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
-# be sure to set OPENAI_API_KEY first
 dotnet run --project samples/ToolCalling/ToolCalling.csproj
-# be sure to set OPENAI_API_KEY first
 dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
 ```
 
-## Notes
+For OpenAI samples, set `OPENAI_API_KEY` first.
 
-- If you pass `WithMemory(...)`, `AgenticBuilder` auto-adds `MemoryMiddleware` unless you already registered one.
-- If you need custom initial context shape (for specialized implementations), register `WithContextFactory(...)`.
-- Register tools with `WithTool(...)` / `WithTools(...)`; if a model returns tool calls, `Agent` executes them and re-prompts the model.
-- `IChannel` is defined for future transport integrations.
+## Repository layout
 
-## Custom Context Factory Example
-
-```csharp
-using Agentic.Abstractions;
-using Agentic.Builder;
-using Agentic.Core;
-
-var assistant = new AgenticBuilder()
-    .WithModelProvider(new DemoModelProvider())
-    .WithContextFactory(new DomainContextFactory())
-    .Build();
-
-public sealed class DomainContextFactory : IAssistantContextFactory
-{
-    public AssistantContext Create(string input, IReadOnlyList<ChatMessage> history)
-    {
-        var context = new AssistantContext(input, history);
-        context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, "You are a domain-specific assistant."));
-        return context;
-    }
-}
-```
+- `Abstractions/` contracts and interfaces
+- `Builder/` fluent `AgentBuilder`
+- `Core/` runtime types and built-in memory implementations
+- `Middleware/` middleware contracts and built-in memory middleware
+- `Providers/OpenAi/` OpenAI provider implementation
+- `samples/` runnable usage examples
+- `tests/` unit tests
