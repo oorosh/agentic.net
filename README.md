@@ -22,15 +22,21 @@ Use Agentic.NET when you want to:
 
 This repository currently targets `net10.0` and C# preview.
 
-## Add it to your project
+## Install
 
-This repo is currently consumed as a project reference.
+### Option 1: NuGet (recommended for app projects)
 
 ```bash
-dotnet add <YourApp>.csproj reference ./Agentic.NET.csproj
+dotnet add package Agentic.NET
 ```
 
-Or add this to your app `.csproj`:
+### Option 2: Project reference (recommended for local development)
+
+```bash
+dotnet add <YourApp>.csproj reference ../agentic.net/Agentic.NET.csproj
+```
+
+Or add this to your app `.csproj` manually:
 
 ```xml
 <ItemGroup>
@@ -115,3 +121,23 @@ For OpenAI samples, set `OPENAI_API_KEY` first.
 - `Providers/OpenAi/` OpenAI provider implementation
 - `samples/` runnable usage examples
 - `tests/` unit tests
+
+## Publishing (maintainers)
+
+NuGet publishing is automated by GitHub Actions in `.github/workflows/publish-nuget.yml`.
+
+Required one-time setup:
+1. Create a NuGet API key with push permissions.
+2. Add it as repository secret: `NUGET_API_KEY`.
+
+Release flow:
+1. Update `<Version>` in `Agentic.NET.csproj`.
+2. Commit and push to `main`.
+3. Create and push a version tag, for example:
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+The workflow builds, tests, packs, and publishes on `v*` tags.
