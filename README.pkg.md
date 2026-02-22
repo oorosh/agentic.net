@@ -16,38 +16,26 @@ dotnet add package Agentic.NET --version 0.1.1-preview
 ## Quick example
 
 ```csharp
-using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
+using Agentic.Providers.OpenAi;
 
-// create a simple agent that echoes back the last user message
+var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
+    ?? throw new InvalidOperationException("Set OPENAI_API_KEY first.");
+var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
+
+// configure built-in OpenAI provider directly in the pipeline
 var agent = new AgentBuilder()
-    .WithModelProvider(new DemoModelProvider())
+    .WithOpenAi(apiKey, model: model)
     .Build();
 
 var reply = await agent.ReplyAsync("What's up?");
-Console.WriteLine(reply); // -> "Echo: What's up?"
+Console.WriteLine(reply);
 
-// the same agent supports optional memory, middleware and tools
-
-public sealed class DemoModelProvider : IModelProvider
-{
-    public IAgentModel CreateModel() => new DemoModel();
-}
-
-public sealed class DemoModel : IAgentModel
-{
-    public Task<AgentResponse> CompleteAsync(
-        IReadOnlyList<ChatMessage> messages,
-        CancellationToken cancellationToken = default)
-    {
-        var lastUser = messages.Last(m => m.Role == ChatRole.User).Content;
-        return Task.FromResult(new AgentResponse($"Echo: {lastUser}"));
-    }
-}
+// optional: add memory, middleware and tools the same way
 ```
 
-Note: this package is a **preview** release (`-preview1` suffix); expect
+Note: this package is a **preview** release; expect
 breaking changes until a stable version is published.
 
 For full documentation, examples and contribution instructions see
