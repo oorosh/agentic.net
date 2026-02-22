@@ -948,4 +948,159 @@ description: A test skill.
             return Task.FromResult<Skill?>(_skills.FirstOrDefault(s => s.Name == name));
         }
     }
+
+    [Fact]
+    public async Task FileSystemSoulLoader_parses_soul_document()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var soulPath = Path.Combine(tempDir, "SOUL.md");
+            await File.WriteAllTextAsync(soulPath,
+                @"# ContentWriter
+
+## Role
+You are a content marketing specialist.
+
+## Personality
+- Tone: Professional but approachable
+- Style: Clear and concise
+
+## Rules
+- ALWAYS respond in English
+- NEVER use clickbait
+
+## Tools
+- Use Browser to research topics
+- Use WordPress API to publish
+
+## Handoffs
+- Ask @SEOAgent for keyword research");
+
+            var loader = new FileSystemSoulLoader(soulPath);
+            var soul = await loader.LoadSoulAsync();
+
+            Assert.NotNull(soul);
+            Assert.Equal("ContentWriter", soul.Name);
+            Assert.Contains("content marketing specialist", soul.Role);
+            Assert.Contains("Professional but approachable", soul.Personality);
+            Assert.Contains("ALWAYS respond in English", soul.Rules);
+            Assert.Contains("Browser to research", soul.Tools);
+            Assert.Contains("@SEOAgent", soul.Handoffs);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task FileSystemSoulLoader_returns_null_when_file_not_found()
+    {
+        var loader = new FileSystemSoulLoader("/nonexistent/path/SOUL.md");
+        var soul = await loader.LoadSoulAsync();
+
+        Assert.Null(soul);
+    }
+
+    [Fact]
+    public async Task FileSystemSoulLoader_parses_from_directory()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            await File.WriteAllTextAsync(Path.Combine(tempDir, "SOUL.md"),
+                @"# MyAgent
+## Role
+Test role");
+
+            var loader = new FileSystemSoulLoader(new DirectoryInfo(tempDir));
+            var soul = await loader.LoadSoulAsync();
+
+            Assert.NotNull(soul);
+            Assert.Equal("MyAgent", soul.Name);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void FileSystemSoulLoader_ToSystemPrompt_generates_correct_format()
+    {
+        var soul = new SoulDocument
+        {
+            Name = "TestAgent",
+            Role = "You are a helpful assistant.",
+            Personality = "Tone: friendly",
+            Rules = "ALWAYS be honest",
+            Tools = "Use calculator for math"
+        };
+
+        var prompt = FileSystemSoulLoader.ToSystemPrompt(soul);
+
+        Assert.Contains("You are a helpful assistant.", prompt);
+        Assert.Contains("Tone: friendly", prompt);
+        Assert.Contains("ALWAYS be honest", prompt);
+        Assert.Contains("calculator for math", prompt);
+    }
+
+    [Fact]
+    public void FileSystemSoulLoader_ToSystemPrompt_handles_missing_sections()
+    {
+        var soul = new SoulDocument
+        {
+            Name = "MinimalAgent",
+            Role = "You are an agent."
+        };
+
+        var prompt = FileSystemSoulLoader.ToSystemPrompt(soul);
+
+        Assert.Equal("You are an agent.", prompt);
+    }
+
+    [Fact]
+    public async Task AgentBuilder_with_soul_loads_soul_document()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var soulPath = Path.Combine(tempDir, "SOUL.md");
+            await File.WriteAllTextAsync(soulPath,
+                @"# AssistantBot
+## Role
+You are a helpful assistant.");
+
+            var assistant = new AgentBuilder()
+                .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+                .WithSoul(soulPath)
+                .Build();
+
+            await assistant.InitializeAsync();
+
+            Assert.NotNull(assistant.Soul);
+            Assert.Equal("AssistantBot", assistant.Soul.Name);
+            Assert.Contains("helpful assistant", assistant.Soul.Role);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Agent_with_no_soul_has_null_soul()
+    {
+        var assistant = new AgentBuilder()
+            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .Build();
+
+        await assistant.InitializeAsync();
+
+        Assert.Null(assistant.Soul);
+    }
 }

@@ -14,8 +14,10 @@ public sealed class Agent
     private readonly IReadOnlyList<IAssistantMiddleware> _middlewares;
     private readonly IReadOnlyDictionary<string, ITool> _tools;
     private readonly ISkillLoader? _skillLoader;
+    private readonly ISoulLoader? _soulLoader;
     private readonly List<ChatMessage> _history = [];
     private List<Skill>? _skills;
+    private SoulDocument? _soul;
     private bool _initialized;
 
     internal Agent(
@@ -25,7 +27,8 @@ public sealed class Agent
         IAssistantContextFactory contextFactory,
         IReadOnlyList<IAssistantMiddleware> middlewares,
         IReadOnlyDictionary<string, ITool> tools,
-        ISkillLoader? skillLoader = null)
+        ISkillLoader? skillLoader = null,
+        ISoulLoader? soulLoader = null)
     {
         _model = model;
         _memoryService = memoryService;
@@ -34,11 +37,14 @@ public sealed class Agent
         _middlewares = middlewares;
         _tools = tools;
         _skillLoader = skillLoader;
+        _soulLoader = soulLoader;
     }
 
     public IReadOnlyList<ChatMessage> History => _history;
 
     public IReadOnlyList<Skill>? Skills => _skills;
+
+    public SoulDocument? Soul => _soul;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -60,6 +66,11 @@ public sealed class Agent
         if (_skillLoader is not null)
         {
             _skills = (await _skillLoader.LoadSkillsAsync(cancellationToken)).ToList();
+        }
+
+        if (_soulLoader is not null)
+        {
+            _soul = await _soulLoader.LoadSoulAsync(cancellationToken);
         }
 
         _initialized = true;

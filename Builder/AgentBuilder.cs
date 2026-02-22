@@ -15,6 +15,7 @@ public sealed class AgentBuilder
     private IVectorStore? _vectorStore;
     private IAssistantContextFactory? _contextFactory;
     private ISkillLoader? _skillLoader;
+    private ISoulLoader? _soulLoader;
     private readonly List<IAssistantMiddleware> _middlewares = [];
     private readonly List<ITool> _tools = [];
 
@@ -85,6 +86,24 @@ public sealed class AgentBuilder
         return this;
     }
 
+    public AgentBuilder WithSoul(string soulFilePath)
+    {
+        _soulLoader = new FileSystemSoulLoader(soulFilePath);
+        return this;
+    }
+
+    public AgentBuilder WithSoul(DirectoryInfo directory)
+    {
+        _soulLoader = new FileSystemSoulLoader(directory);
+        return this;
+    }
+
+    public AgentBuilder WithSoul(ISoulLoader soulLoader)
+    {
+        _soulLoader = soulLoader;
+        return this;
+    }
+
     public AgentBuilder UseMiddleware(IAssistantMiddleware middleware)
     {
         _middlewares.Add(middleware);
@@ -138,6 +157,7 @@ public sealed class AgentBuilder
             _contextFactory ?? new DefaultAssistantContextFactory(),
             pipeline,
             toolLookup,
-            _skillLoader);
+            _skillLoader,
+            _soulLoader);
     }
 }

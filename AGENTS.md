@@ -100,6 +100,7 @@ Agentic.NET/
 ├── Abstractions/     # Interfaces and contracts (IAgentModel, ITool, etc.)
 ├── Builder/           # AgentBuilder fluent API
 ├── Core/             # Runtime types (Agent, AgentContext, ChatMessage)
+├── Loaders/          # Skill and SOUL document loaders
 ├── Middleware/       # Middleware contracts and implementations
 ├── Providers/        # Model provider implementations (OpenAI)
 ├── Stores/           # Vector store implementations (PgVector, InMemory)
@@ -112,6 +113,8 @@ Agentic.NET/
 - **`IMemoryService`**: Memory storage/retrieval with optional embeddings
 - **`IEmbeddingProvider`**: Generates embeddings for semantic memory search
 - **`IVectorStore`**: Pluggable vector storage for semantic search (pgvector, in-memory, etc.)
+- **`ISkillLoader`**: Loads agent skills from filesystem
+- **`ISoulLoader`**: Loads agent identity from SOUL.md
 - **`IAssistantMiddleware`**: Pre/post-process conversation
 - **`ITool`**: Executable function the model can invoke
 - **`IModelProvider`**: Factory for creating model instances
@@ -211,4 +214,128 @@ dotnet run --project samples/BasicChat/BasicChat.csproj
 dotnet run --project samples/ToolCalling/ToolCalling.csproj
 dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
 dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
+```
+
+## Agent Skills
+
+Agentic.NET supports [Agent Skills](https://agentskills.io) - an open standard for giving agents new capabilities.
+
+### Overview
+Skills are folders containing a `SKILL.md` file with YAML frontmatter and markdown instructions. They can include optional `scripts/`, `references/`, and `assets/` directories.
+
+### SKILL.md Format
+```yaml
+---
+name: pdf-processing
+description: Extract text and tables from PDF files, fill forms, merge documents.
+license: MIT
+---
+# Instructions
+Step-by-step instructions for the agent...
+```
+
+### Loading Skills
+```csharp
+var agent = new AgentBuilder()
+    .WithOpenAi(apiKey)
+    .WithSkills("./skills")  // Load all skills from directory
+    .Build();
+
+await agent.InitializeAsync();
+// agent.Skills contains loaded skill metadata
+```
+
+### Generating Skill Prompt XML
+```csharp
+var xml = FileSystemSkillLoader.ToPromptXml(agent.Skills);
+// Generates <available_skills> XML for system prompt
+```
+
+### Adding Custom Skill Loaders
+Implement `ISkillLoader` interface to load skills from other sources (embedded resources, databases, etc.)
+
+## SOUL.md - Agent Identity
+
+Agentic.NET supports [SOUL.md](https://soul.md) - a format for defining agent identity, personality, and behavior.
+
+### Overview
+SOUL.md is a single markdown file that defines who the agent is - its role, personality, rules, tools, and handoffs.
+
+### SOUL.md Format
+```markdown
+# AgentName
+
+## Role
+You are a content marketing specialist for a SaaS company.
+
+## Personality
+- Tone: Professional but approachable
+- Style: Clear, concise, scannable
+
+## Rules
+- ALWAYS respond in English
+- NEVER use clickbait
+
+## Tools
+- Use Browser to research topics
+- Use WordPress API to publish
+
+## Handoffs
+- Ask @SEOAgent for keyword research
+- Hand off to @Publisher when ready
+```
+
+### Loading SOUL.md
+```csharp
+var agent = new AgentBuilder()
+    .WithOpenAi(apiKey)
+    .WithSoul("./SOUL.md")  // or directory (looks for SOUL.md)
+    .Build();
+
+await agent.InitializeAsync();
+// agent.Soul contains parsed identity
+```
+
+### Generating System Prompt
+```csharp
+var systemPrompt = FileSystemSoulLoader.ToSystemPrompt(agent.Soul);
+// Generates a system prompt from SOUL.md sections
+```
+
+### Adding Custom Soul Loaders
+Implement `ISoulLoader` interface to load SOUL.md from other sources
+
+## Complete Example
+
+```csharp
+var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
+await embeddingProvider.InitializeAsync();
+
+var vectorStore = new PgVectorStore(connectionString, dimensions: embeddingProvider.Dimensions);
+
+var agent = new AgentBuilder()
+    .WithOpenAi(apiKey)
+    .WithMemory(new SqliteMemoryService(vectorStore))
+    .WithEmbeddingProvider(embeddingProvider)
+    .WithVectorStore(vectorStore)
+    .WithSkills("./skills")      // Load agent skills
+    .WithSoul("./SOUL.md")        // Load agent identity
+    .WithTool(new MyCustomTool())
+    .Build();
+
+await agent.InitializeAsync();
+
+// Use skills
+if (agent.Skills is { } skills)
+{
+    var skillXml = FileSystemSkillLoader.ToPromptXml(skills);
+    // Add to system prompt
+}
+
+// Use soul
+if (agent.Soul is { } soul)
+{
+    var systemPrompt = FileSystemSoulLoader.ToSystemPrompt(soul);
+    // Add to system prompt
+}
 ```
