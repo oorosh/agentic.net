@@ -17,8 +17,7 @@ if (string.IsNullOrWhiteSpace(apiKey))
 
 var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
 
-var memoryPath = "memory.db";
-using var memoryService = new SqliteMemoryService(memoryPath);
+using var memoryService = new SqliteMemoryService();
 await memoryService.InitializeAsync();
 
 IEmbeddingProvider? embeddingProvider = null;

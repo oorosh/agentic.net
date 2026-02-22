@@ -139,9 +139,14 @@ Agentic.NET supports semantic memory through embeddings for improved context rel
 var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
 var assistant = new AgentBuilder()
     .WithOpenAi(apiKey)
-    .WithMemory(new SqliteMemoryService("memory.db"))
+    .WithMemory(new SqliteMemoryService("/path/to/memory.db"))
     .WithEmbeddingProvider(embeddingProvider)
     .Build();
+```
+
+Or use the default location (app base directory):
+```csharp
+.WithMemory(new SqliteMemoryService())
 ```
 
 ### Benefits

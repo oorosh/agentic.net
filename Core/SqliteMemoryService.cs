@@ -1,4 +1,5 @@
 using System.Data;
+using System.IO;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Agentic.Abstractions;
@@ -25,6 +26,8 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
             DataSource = dbPath
         }.ToString();
     }
+
+    public SqliteMemoryService() : this(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "memory.db")) { }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {

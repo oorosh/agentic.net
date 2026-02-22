@@ -53,8 +53,7 @@ Assistant: You mentioned that you love coffee. Is there anything else you'd like
 ### Memory Setup with SQLite
 
 ```csharp
-var memoryPath = "memory.db";
-using var memoryService = new SqliteMemoryService(memoryPath);
+using var memoryService = new SqliteMemoryService();
 await memoryService.InitializeAsync();
 ```
 
