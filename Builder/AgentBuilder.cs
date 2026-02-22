@@ -1,5 +1,6 @@
 using Agentic.Abstractions;
 using Agentic.Core;
+using Agentic.Loaders;
 using Agentic.Middleware;
 using Agentic.Providers.OpenAi;
 using Agentic.Stores;
@@ -13,6 +14,7 @@ public sealed class AgentBuilder
     private IEmbeddingProvider? _embeddingProvider;
     private IVectorStore? _vectorStore;
     private IAssistantContextFactory? _contextFactory;
+    private ISkillLoader? _skillLoader;
     private readonly List<IAssistantMiddleware> _middlewares = [];
     private readonly List<ITool> _tools = [];
 
@@ -71,6 +73,18 @@ public sealed class AgentBuilder
         return this;
     }
 
+    public AgentBuilder WithSkills(string skillsDirectory)
+    {
+        _skillLoader = new FileSystemSkillLoader(skillsDirectory);
+        return this;
+    }
+
+    public AgentBuilder WithSkills(ISkillLoader skillLoader)
+    {
+        _skillLoader = skillLoader;
+        return this;
+    }
+
     public AgentBuilder UseMiddleware(IAssistantMiddleware middleware)
     {
         _middlewares.Add(middleware);
@@ -123,6 +137,7 @@ public sealed class AgentBuilder
             _embeddingProvider,
             _contextFactory ?? new DefaultAssistantContextFactory(),
             pipeline,
-            toolLookup);
+            toolLookup,
+            _skillLoader);
     }
 }

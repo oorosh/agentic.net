@@ -1,4 +1,5 @@
 using Agentic.Abstractions;
+using Agentic.Loaders;
 using Agentic.Middleware;
 
 namespace Agentic.Core;
@@ -12,7 +13,9 @@ public sealed class Agent
     private readonly IAssistantContextFactory _contextFactory;
     private readonly IReadOnlyList<IAssistantMiddleware> _middlewares;
     private readonly IReadOnlyDictionary<string, ITool> _tools;
+    private readonly ISkillLoader? _skillLoader;
     private readonly List<ChatMessage> _history = [];
+    private List<Skill>? _skills;
     private bool _initialized;
 
     internal Agent(
@@ -21,7 +24,8 @@ public sealed class Agent
         IEmbeddingProvider? embeddingProvider,
         IAssistantContextFactory contextFactory,
         IReadOnlyList<IAssistantMiddleware> middlewares,
-        IReadOnlyDictionary<string, ITool> tools)
+        IReadOnlyDictionary<string, ITool> tools,
+        ISkillLoader? skillLoader = null)
     {
         _model = model;
         _memoryService = memoryService;
@@ -29,9 +33,12 @@ public sealed class Agent
         _contextFactory = contextFactory;
         _middlewares = middlewares;
         _tools = tools;
+        _skillLoader = skillLoader;
     }
 
     public IReadOnlyList<ChatMessage> History => _history;
+
+    public IReadOnlyList<Skill>? Skills => _skills;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -48,6 +55,11 @@ public sealed class Agent
         if (_embeddingProvider is not null)
         {
             await _embeddingProvider.InitializeAsync(cancellationToken);
+        }
+
+        if (_skillLoader is not null)
+        {
+            _skills = (await _skillLoader.LoadSkillsAsync(cancellationToken)).ToList();
         }
 
         _initialized = true;

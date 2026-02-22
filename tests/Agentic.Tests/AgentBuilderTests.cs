@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
+using Agentic.Loaders;
 using Agentic.Middleware;
 using Agentic.Providers.OpenAi;
 using Agentic.Stores;
@@ -709,5 +710,242 @@ public class AgentBuilderTests
     {
         var store = new InMemoryVectorStore(dimensions: 768);
         Assert.Equal(768, store.Dimensions);
+    }
+
+    [Fact]
+    public async Task FileSystemSkillLoader_loads_skills_from_directory()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var skillDir = Path.Combine(tempDir, "pdf-processing");
+            Directory.CreateDirectory(skillDir);
+            await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
+                @"---
+name: pdf-processing
+description: Extract text and tables from PDF files.
+---
+# PDF Processing
+Steps to process PDFs...");
+
+            var loader = new FileSystemSkillLoader(tempDir);
+            var skills = await loader.LoadSkillsAsync();
+
+            Assert.Single(skills);
+            Assert.Equal("pdf-processing", skills[0].Name);
+            Assert.Equal("Extract text and tables from PDF files.", skills[0].Description);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task FileSystemSkillLoader_returns_empty_when_directory_does_not_exist()
+    {
+        var loader = new FileSystemSkillLoader("/nonexistent/path");
+        var skills = await loader.LoadSkillsAsync();
+
+        Assert.Empty(skills);
+    }
+
+    [Fact]
+    public async Task FileSystemSkillLoader_skips_directories_without_skill_md()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            Directory.CreateDirectory(Path.Combine(tempDir, "empty-skill"));
+
+            var loader = new FileSystemSkillLoader(tempDir);
+            var skills = await loader.LoadSkillsAsync();
+
+            Assert.Empty(skills);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task FileSystemSkillLoader_parses_full_metadata()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var skillDir = Path.Combine(tempDir, "test-skill");
+            Directory.CreateDirectory(skillDir);
+            await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
+                @"---
+name: test-skill
+description: A test skill with full metadata.
+license: MIT
+compatibility: Requires .NET 8
+allowed-tools: Bash Read
+---
+# Instructions");
+
+            var loader = new FileSystemSkillLoader(tempDir);
+            var skills = await loader.LoadSkillsAsync();
+
+            Assert.Single(skills);
+            Assert.Equal("test-skill", skills[0].Name);
+            Assert.Equal("MIT", skills[0].License);
+            Assert.Equal("Requires .NET 8", skills[0].Compatibility);
+            Assert.Equal("Bash Read", skills[0].AllowedTools);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task FileSystemSkillLoader_loads_full_instructions_when_requested()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var skillDir = Path.Combine(tempDir, "with-instructions");
+            Directory.CreateDirectory(skillDir);
+            await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
+                @"---
+name: with-instructions
+description: A skill with instructions.
+---
+# Step 1
+Do this first.
+
+# Step 2
+Then do this.");
+
+            var loader = new FileSystemSkillLoader(tempDir);
+            await loader.LoadSkillsAsync();
+            var skill = await loader.LoadSkillAsync("with-instructions");
+
+            Assert.NotNull(skill);
+            Assert.Contains("Step 1", skill.Instructions);
+            Assert.Contains("Step 2", skill.Instructions);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task FileSystemSkillLoader_returns_null_for_unknown_skill()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+
+            var loader = new FileSystemSkillLoader(tempDir);
+            var skill = await loader.LoadSkillAsync("nonexistent");
+
+            Assert.Null(skill);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void FileSystemSkillLoader_ToPromptXml_generates_correct_format()
+    {
+        var skills = new List<Skill>
+        {
+            new() { Name = "pdf-processing", Description = "Extract text from PDFs.", Path = "/skills/pdf" },
+            new() { Name = "data-analysis", Description = "Analyze datasets.", Path = "/skills/data" }
+        };
+
+        var xml = FileSystemSkillLoader.ToPromptXml(skills);
+
+        Assert.Contains("<available_skills>", xml);
+        Assert.Contains("<name>pdf-processing</name>", xml);
+        Assert.Contains("<description>Extract text from PDFs.</description>", xml);
+        Assert.Contains("<location>/skills/pdf</location>", xml);
+        Assert.Contains("<name>data-analysis</name>", xml);
+        Assert.Contains("</available_skills>", xml);
+    }
+
+    [Fact]
+    public void FileSystemSkillLoader_ToPromptXml_returns_empty_for_empty_list()
+    {
+        var xml = FileSystemSkillLoader.ToPromptXml([]);
+        Assert.Empty(xml);
+    }
+
+    [Fact]
+    public async Task AgentBuilder_with_skills_directory_loads_skills()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var skillDir = Path.Combine(tempDir, "test-skill");
+            Directory.CreateDirectory(skillDir);
+            await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
+                @"---
+name: test-skill
+description: A test skill.
+---
+# Instructions");
+
+            var assistant = new AgentBuilder()
+                .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+                .WithSkills(tempDir)
+                .Build();
+
+            await assistant.InitializeAsync();
+
+            Assert.NotNull(assistant.Skills);
+            Assert.Single(assistant.Skills);
+            Assert.Equal("test-skill", assistant.Skills[0].Name);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Agent_with_no_skills_has_null_skills()
+    {
+        var assistant = new AgentBuilder()
+            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .Build();
+
+        await assistant.InitializeAsync();
+
+        Assert.Null(assistant.Skills);
+    }
+
+    private sealed class TestSkillLoader : ISkillLoader
+    {
+        private readonly List<Skill> _skills;
+
+        public TestSkillLoader(IEnumerable<Skill> skills)
+        {
+            _skills = skills.ToList();
+        }
+
+        public Task<IReadOnlyList<Skill>> LoadSkillsAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<Skill>>(_skills);
+        }
+
+        public Task<Skill?> LoadSkillAsync(string name, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<Skill?>(_skills.FirstOrDefault(s => s.Name == name));
+        }
     }
 }
