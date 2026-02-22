@@ -1,7 +1,6 @@
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
 
 // PersonalAssistant sample: uses the OpenAI Chat Completion API as the
 // model provider and persists conversation memory into a simple SQLite
@@ -15,6 +14,8 @@ if (string.IsNullOrWhiteSpace(apiKey))
     return;
 }
 
+var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
+
 var memoryPath = "memory.db";
 using var memoryService = new SqliteMemoryService(memoryPath);
 await memoryService.InitializeAsync();
@@ -26,7 +27,7 @@ if (restored.Count > 0)
 }
 
 var assistant = new AgentBuilder()
-    .WithModelProvider(new OpenAiChatModelProvider(apiKey))
+    .WithOpenAi(apiKey, model: model)
     .WithMemory(memoryService)
     .Build();
 

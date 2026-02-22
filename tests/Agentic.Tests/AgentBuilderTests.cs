@@ -7,6 +7,7 @@ using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
 using Agentic.Middleware;
+using Agentic.Providers.OpenAi;
 using System.IO;
 using Xunit;
 
@@ -19,6 +20,53 @@ public class AgentBuilderTests
     {
         var builder = new AgentBuilder();
         Assert.Throws<InvalidOperationException>(() => builder.Build());
+    }
+
+    [Fact]
+    public void Build_succeeds_when_openai_provider_configured_via_builder()
+    {
+        var builder = new AgentBuilder()
+            .WithOpenAi("test-api-key", tools:
+            [
+                new OpenAiFunctionToolDefinition(
+                    "get_weather",
+                    "Get weather for a city.",
+                    [new OpenAiFunctionToolParameter("city", "string", "City name")])
+            ]);
+
+        var assistant = builder.Build();
+
+        Assert.NotNull(assistant);
+    }
+
+    [Fact]
+    public void Build_succeeds_when_openai_model_configured_via_builder()
+    {
+        var assistant = new AgentBuilder()
+            .WithOpenAi("test-api-key", model: "gpt-4.1-mini")
+            .Build();
+
+        Assert.NotNull(assistant);
+    }
+
+    [Fact]
+    public void Build_succeeds_when_openai_options_are_configured_via_builder()
+    {
+        var assistant = new AgentBuilder()
+            .WithOpenAi("test-api-key", options =>
+            {
+                options.Model = "gpt-4.1-mini";
+                options.Tools =
+                [
+                    new OpenAiFunctionToolDefinition(
+                        "get_weather",
+                        "Get weather for a city.",
+                        [new OpenAiFunctionToolParameter("city", "string", "City name")])
+                ];
+            })
+            .Build();
+
+        Assert.NotNull(assistant);
     }
 
     [Fact]

@@ -10,16 +10,19 @@ if (string.IsNullOrWhiteSpace(apiKey))
     return;
 }
 
+var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
+
 var assistant = new AgentBuilder()
-    .WithModelProvider(new OpenAiChatModelProvider(
+    .WithOpenAi(
         apiKey,
+        model,
         tools:
         [
             new OpenAiFunctionToolDefinition(
                 "get_weather",
                 "Get weather for a city.",
                 [new OpenAiFunctionToolParameter("city", "string", "City name")])
-        ]))
+        ])
     .WithTool(new GetWeatherTool())
     .Build();
 

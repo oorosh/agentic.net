@@ -4,6 +4,12 @@ using Agentic.Core;
 
 namespace Agentic.Providers.OpenAi;
 
+public sealed class OpenAiProviderOptions
+{
+    public string Model { get; set; } = OpenAiModels.Gpt4oMini;
+    public IReadOnlyList<OpenAiFunctionToolDefinition>? Tools { get; set; }
+}
+
 public sealed class OpenAiChatModelProvider : IModelProvider
 {
     private readonly string _apiKey;
@@ -12,7 +18,7 @@ public sealed class OpenAiChatModelProvider : IModelProvider
 
     public OpenAiChatModelProvider(
         string apiKey,
-        string model = "gpt-4o-mini",
+        string model = OpenAiModels.Gpt4oMini,
         IReadOnlyList<OpenAiFunctionToolDefinition>? tools = null)
     {
         _apiKey = apiKey;

@@ -1,6 +1,7 @@
 using Agentic.Abstractions;
 using Agentic.Core;
 using Agentic.Middleware;
+using Agentic.Providers.OpenAi;
 
 namespace Agentic.Builder;
 
@@ -15,6 +16,25 @@ public sealed class AgentBuilder
     public AgentBuilder WithModelProvider(IModelProvider modelProvider)
     {
         _modelProvider = modelProvider;
+        return this;
+    }
+
+    public AgentBuilder WithOpenAi(
+        string apiKey,
+        string model = OpenAiModels.Gpt4oMini,
+        IReadOnlyList<OpenAiFunctionToolDefinition>? tools = null)
+    {
+        _modelProvider = new OpenAiChatModelProvider(apiKey, model, tools);
+        return this;
+    }
+
+    public AgentBuilder WithOpenAi(
+        string apiKey,
+        Action<OpenAiProviderOptions> configure)
+    {
+        var options = new OpenAiProviderOptions();
+        configure(options);
+        _modelProvider = new OpenAiChatModelProvider(apiKey, options.Model, options.Tools);
         return this;
     }
 

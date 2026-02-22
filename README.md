@@ -13,16 +13,6 @@ The library exposes a minimal runtime with:
 
 Designed for clarity and composability, the API lets your app stay in control while leveraging AI logic.
 
-## What this project is
-
-Use Agentic.NET when you want to:
-- add assistant/chat behavior to an existing .NET app
-- keep model providers swappable
-- add custom business tools the model can call
-- plug memory and middleware into the request pipeline
-
-The library targets `net10.0` (C# 12) and is compatible with current stable .NET.
-
 ## Install
 
 ### NuGet (recommended for application developers)
@@ -36,33 +26,33 @@ dotnet add package Agentic.NET --version 0.1.1-preview (preview release)
 
 NuGet clients (Visual Studio, Rider, CLI) will pull the compiled library and dependencies automatically.
 
-### Local project reference (for contributors)
-
-```bash
-dotnet add <YourApp>.csproj reference ../agentic.net/Agentic.NET.csproj
-```
-
-Or add this to your app `.csproj` manually:
-
-```xml
-<ItemGroup>
-  <ProjectReference Include="../agentic.net/Agentic.NET.csproj" />
-</ItemGroup>
-```
-
 ## Minimal usage
+
+```csharp
+using Agentic.Builder;
+using Agentic.Providers.OpenAi;
+
+var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
+    ?? throw new InvalidOperationException("Set OPENAI_API_KEY first.");
+
+var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
+
+var agent = new AgentBuilder()
+    .WithOpenAi(apiKey, model)
+    .Build();
+
+var reply = await agent.ReplyAsync("Hello");
+Console.WriteLine(reply);
+```
+
+## Custom model provider (optional)
+
+If you need a non-OpenAI backend, implement your own provider:
 
 ```csharp
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
-
-var agent = new AgentBuilder()
-    .WithModelProvider(new DemoModelProvider())
-    .Build();
-
-var reply = await agent.ReplyAsync("Hello");
-Console.WriteLine(reply);
 
 public sealed class DemoModelProvider : IModelProvider
 {
@@ -80,10 +70,11 @@ public sealed class DemoModel : IAgentModel
     }
 }
 ```
-
 ## Typical integration pattern
 
-1. Implement `IModelProvider` for your LLM backend.
+1. Choose a model setup:
+    - built-in OpenAI via `WithOpenAi(...)`, or
+    - custom provider via `WithModelProvider(...)`.
 2. Build an `Agent` with `AgentBuilder`.
 3. Optionally add memory with `WithMemory(...)`.
 4. Optionally add middleware with `UseMiddleware(...)`.
@@ -127,23 +118,3 @@ For OpenAI samples, set `OPENAI_API_KEY` first.
 - `Providers/OpenAi/` OpenAI provider implementation
 - `samples/` runnable usage examples
 - `tests/` unit tests
-
-## Publishing (maintainers)
-
-NuGet publishing is automated by GitHub Actions in `.github/workflows/publish-nuget.yml`.
-
-Required one-time setup:
-1. Create a NuGet API key with push permissions.
-2. Add it as repository secret: `NUGET_API_KEY`.
-
-Release flow:
-1. Update `<Version>` in `Agentic.NET.csproj`.
-2. Commit and push to `main`.
-3. Create and push a version tag, for example:
-
-```bash
-git tag v0.1.1
-git push origin v0.1.1
-```
-
-The workflow builds, tests, packs, and publishes on `v*` tags.
