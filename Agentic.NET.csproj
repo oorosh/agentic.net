@@ -13,7 +13,7 @@
     <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
     <PackageId>Agentic.NET</PackageId>
     <!-- use a prerelease version to keep the package in "preview" state -->
-    <Version>0.1.1-preview</Version>
+    <Version>0.1.2-preview</Version>
     <Authors>Uros Biberdzic</Authors>
     <Description>Create AI assistants in .NET with pluggable models, memory, middleware, and tools.</Description>
     <PackageProjectUrl>https://github.com/oorosh/agentic.net</PackageProjectUrl>
