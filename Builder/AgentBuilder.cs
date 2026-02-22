@@ -86,6 +86,13 @@ public sealed class AgentBuilder
         return this;
     }
 
+    public AgentBuilder WithAgent(string agentDirectory)
+    {
+        _skillLoader = new FileSystemSkillLoader(agentDirectory);
+        _soulLoader = new FileSystemSoulLoader(agentDirectory);
+        return this;
+    }
+
     public AgentBuilder WithSoul(string soulFilePath)
     {
         _soulLoader = new FileSystemSoulLoader(soulFilePath);

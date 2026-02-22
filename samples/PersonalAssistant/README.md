@@ -116,16 +116,22 @@ if (embeddingProvider != null)
 
 ## Adding Skills and SOUL
 
-You can also configure skills and SOUL.md identity:
+You can configure skills and SOUL.md identity using individual methods or a single call:
 
 ```csharp
+// Single call - load both from same directory
 var agent = new AgentBuilder()
     .WithOpenAi(apiKey)
     .WithMemory(memoryService)
-    .WithEmbeddingProvider(embeddingProvider)
-    .WithVectorStore(vectorStore)
-    .WithSkills("./skills")      // Load agent skills
-    .WithSoul("./SOUL.md")        // Load agent identity
+    .WithAgent("./my-agent")  // loads skills and SOUL.md from folder
+    .Build();
+
+// Or individually
+var agent = new AgentBuilder()
+    .WithOpenAi(apiKey)
+    .WithMemory(memoryService)
+    .WithSkills("./skills")   // load agent skills
+    .WithSoul("./SOUL.md")    // load agent identity
     .Build();
 ```
 

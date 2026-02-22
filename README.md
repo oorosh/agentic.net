@@ -79,9 +79,10 @@ public sealed class DemoModel : IAgentModel
     - custom provider via `WithModelProvider(...)`.
 2. Build an `Agent` with `AgentBuilder`.
 3. Optionally add memory with `WithMemory(...)`.
-4. Optionally add middleware with `UseMiddleware(...)`.
-5. Optionally register tools with `WithTool(...)`.
-6. Call `ReplyAsync(...)` from your app/service/controller.
+4. Optionally add skills and identity with `WithAgent(...)` or separately with `WithSkills(...)` and `WithSoul(...)`.
+5. Optionally add middleware with `UseMiddleware(...)`.
+6. Optionally register tools with `WithTool(...)`.
+7. Call `ReplyAsync(...)` from your app/service/controller.
 
 ## Key concepts
 
