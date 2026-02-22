@@ -111,8 +111,8 @@ Agentic.NET/
 ### Key Interfaces
 - **`IAgentModel`**: Underlying LLM/chat model abstraction
 - **`IMemoryService`**: Memory storage/retrieval with optional embeddings
-- **`IEmbeddingProvider`**: Generates embeddings for semantic memory search
-- **`IVectorStore`**: Pluggable vector storage for semantic search (pgvector, in-memory, etc.)
+- **`IEmbeddingProvider`** (Vector Provider): Generates embeddings/vectors for semantic memory search
+- **`IVectorStore`**: Pluggable storage for embeddings (pgvector, in-memory, etc.)
 - **`ISkillLoader`**: Loads agent skills from filesystem
 - **`ISoulLoader`**: Loads agent identity from SOUL.md
 - **`IAssistantMiddleware`**: Pre/post-process conversation
@@ -133,14 +133,21 @@ Agentic.NET/
 
 ## Embeddings and Semantic Memory
 
-Agentic.NET supports semantic memory through embeddings for improved context relevance:
+Agentic.NET supports semantic memory through embeddings for improved context relevance. The architecture uses two key components:
+
+### Components
+
+| Component | Purpose | Examples |
+|-----------|---------|----------|
+| **IEmbeddingProvider** (Vector Provider) | Generates embeddings from text | OpenAiEmbeddingProvider |
+| **IVectorStore** | Stores and searches embeddings | PgVectorStore, InMemoryVectorStore |
 
 ### Adding Embeddings
-1. Implement `IEmbeddingProvider` (e.g., `OpenAiEmbeddingProvider`)
+1. Add an **embedding provider**: `IEmbeddingProvider` generates vectors from text
 2. Configure in `AgentBuilder`: `.WithEmbeddingProvider(provider)`
-3. Optionally add a vector store: `.WithVectorStore(vectorStore)`
+3. Optionally add a **vector store**: `.WithVectorStore(vectorStore)` for production-scale search
 4. Embeddings are automatically generated and stored for each message
-5. Retrieval uses cosine similarity for semantic matching
+5. Retrieval uses cosine similarity (or HNSW index with pgvector) for semantic matching
 
 ### Vector Storage Options
 

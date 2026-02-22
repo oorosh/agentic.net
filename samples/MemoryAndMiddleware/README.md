@@ -8,6 +8,7 @@ This sample demonstrates how to add memory services and custom middleware to an 
 - **Custom Middleware**: Implements `IAssistantMiddleware` to modify conversation behavior
 - **Context Factory**: Custom `IAssistantContextFactory` for additional context management
 - **Semantic Memory (Optional)**: Enables embeddings for improved context relevance when `USE_EMBEDDINGS=true`
+- **Vector Storage**: Supports in-memory and pgvector for embedding storage
 - **In-Memory Storage**: Uses `InMemoryMemoryService` for non-persistent memory
 
 ## Running the Sample
@@ -18,10 +19,16 @@ This sample demonstrates how to add memory services and custom middleware to an 
 dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
 ```
 
-### With Semantic Embeddings
+### With Semantic Embeddings (In-Memory)
 
 ```bash
 USE_EMBEDDINGS=true OPENAI_API_KEY=your_key dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
+```
+
+### With Semantic Embeddings (PgVector)
+
+```bash
+USE_EMBEDDINGS=true USE_PGVECTOR=true PGVECTOR_CONNECTION_STRING="Host=localhost;Database=memory" OPENAI_API_KEY=your_key dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
 ```
 
 The sample runs a fixed conversation and shows how memory retains context:
@@ -55,15 +62,31 @@ var builder = new AgentBuilder()
 
 ```csharp
 IEmbeddingProvider? embeddingProvider = null;
-if (!string.IsNullOrWhiteSpace(apiKey) && Environment.GetEnvironmentVariable("USE_EMBEDDINGS")?.ToLower() == "true")
+IVectorStore? vectorStore = null;
+
+var useEmbeddings = Environment.GetEnvironmentVariable("USE_EMBEDDINGS")?.ToLower() == "true";
+var usePgVector = Environment.GetEnvironmentVariable("USE_PGVECTOR")?.ToLower() == "true";
+
+if (useEmbeddings)
 {
-    embeddingProvider = new Agentic.Providers.OpenAi.OpenAiEmbeddingProvider(apiKey);
+    embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
     await embeddingProvider.InitializeAsync();
+
+    if (usePgVector)
+    {
+        vectorStore = new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
+    }
+    else
+    {
+        vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+    }
 }
 
 if (embeddingProvider != null)
 {
-    builder = builder.WithEmbeddingProvider(embeddingProvider);
+    builder = builder
+        .WithEmbeddingProvider(embeddingProvider)
+        .WithVectorStore(vectorStore!);
 }
 ```
 

@@ -2,16 +2,19 @@
 
 ![Agentic.NET logo](logo.png)
 
-Create AI assistants in .NET with pluggable models, memory, middleware, and tools.
+Create AI assistants in .NET with pluggable models, memory, middleware, tools, skills, and identity.
 
 The library exposes a minimal runtime with:
 
 - `IAgentModel` abstraction for the underlying LLM or chat model
 - optional memory (`IMemoryService`) with built-in SQLite and in‑memory providers
+- optional embeddings (`IEmbeddingProvider`) with pluggable vector storage (`IVectorStore`)
+- optional skills (`ISkillLoader`) from Agent Skills format
+- optional identity (`ISoulLoader`) from SOUL.md format
 - middleware hooks (`IAssistantMiddleware`) to preprocess or postprocess conversation
 - a tool‑calling mechanism (`ITool`) that the model can invoke
 
-Designed for clarity and composability, the API lets your app stay in control while leveraging AI logic.
+Designed for clarity and composability, the API lets your app stay in control while leverage AI logic.
 
 ## Install
 
@@ -82,10 +85,14 @@ public sealed class DemoModel : IAgentModel
 
 ## Key concepts
 
-- `Agent`: runtime orchestrator for model, middleware, memory, and tools.
+- `Agent`: runtime orchestrator for model, middleware, memory, skills, and tools.
 - `AgentContext`: current input + history + mutable working messages.
 - `IAssistantMiddleware`: pipeline steps around model execution.
 - `IMemoryService`: store/retrieve memory for context injection.
+- `IEmbeddingProvider` (Vector Provider): generates embeddings for semantic memory search.
+- `IVectorStore`: pluggable vector storage (pgvector, in-memory, etc.).
+- `ISkillLoader`: loads agent skills from filesystem.
+- `ISoulLoader`: loads agent identity from SOUL.md.
 - `ITool`: executable function the model can request.
 
 If memory is configured, `MemoryMiddleware` is added automatically unless you add your own memory middleware.
@@ -156,14 +163,18 @@ Samples that use OpenAI require the following environment variables:
 
 - `OPENAI_API_KEY`: Your OpenAI API key (required for OpenAI samples)
 - `OPENAI_MODEL`: Model to use (optional, defaults to `gpt-4o-mini`)
-- `USE_EMBEDDINGS`: Set to `true` to enable semantic embeddings in memory samples (optional)
+- `USE_EMBEDDINGS`: Set to `true` to enable semantic embeddings (optional)
+- `USE_PGVECTOR`: Set to `true` to use PostgreSQL pgvector (optional)
+- `PGVECTOR_CONNECTION_STRING`: PostgreSQL connection string (required when USE_PGVECTOR=true)
 
 ## Repository layout
 
 - `Abstractions/` contracts and interfaces
 - `Builder/` fluent `AgentBuilder`
 - `Core/` runtime types and built-in memory implementations
+- `Loaders/` skill and SOUL document loaders
 - `Middleware/` middleware contracts and built-in memory middleware
 - `Providers/OpenAi/` OpenAI provider implementation
+- `Stores/` vector store implementations (pgvector, in-memory)
 - `samples/` runnable usage examples
 - `tests/` unit tests

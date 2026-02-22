@@ -7,6 +7,7 @@ This sample demonstrates a complete AI personal assistant using OpenAI with pers
 - **OpenAI Integration**: Uses OpenAI Chat Completion API as the model provider
 - **Persistent Memory**: Stores conversation history in SQLite database (`memory.db`)
 - **Semantic Memory (Optional)**: Enables vector embeddings for better context relevance
+- **Vector Storage Options**: In-memory or PostgreSQL pgvector for embeddings
 - **Memory Restoration**: Loads previous conversations on startup
 - **Real AI Responses**: Unlike demo models, this uses actual OpenAI for intelligent responses
 - **Cross-Session Continuity**: Conversations persist between program runs
@@ -27,10 +28,17 @@ export OPENAI_API_KEY=your_openai_api_key
 dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
 ```
 
-### With Semantic Embeddings
+### With Semantic Embeddings (In-Memory)
 
 ```bash
 USE_EMBEDDINGS=true dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
+```
+
+### With Semantic Embeddings (PgVector)
+
+Requires PostgreSQL with pgvector extension:
+```bash
+USE_EMBEDDINGS=true USE_PGVECTOR=true PGVECTOR_CONNECTION_STRING="Host=localhost;Database=memory" dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
 ```
 
 The sample loads any existing memory and starts an interactive session:
@@ -61,11 +69,23 @@ await memoryService.InitializeAsync();
 
 ```csharp
 IEmbeddingProvider? embeddingProvider = null;
+IVectorStore? vectorStore = null;
 var useEmbeddings = Environment.GetEnvironmentVariable("USE_EMBEDDINGS")?.ToLower() == "true";
+var usePgVector = Environment.GetEnvironmentVariable("USE_PGVECTOR")?.ToLower() == "true";
+
 if (useEmbeddings)
 {
     embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
     await embeddingProvider.InitializeAsync();
+
+    if (usePgVector)
+    {
+        vectorStore = new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
+    }
+    else
+    {
+        vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+    }
 }
 ```
 
@@ -88,8 +108,25 @@ var builder = new AgentBuilder()
 
 if (embeddingProvider != null)
 {
-    builder = builder.WithEmbeddingProvider(embeddingProvider);
+    builder = builder
+        .WithEmbeddingProvider(embeddingProvider)
+        .WithVectorStore(vectorStore!);
 }
+```
+
+## Adding Skills and SOUL
+
+You can also configure skills and SOUL.md identity:
+
+```csharp
+var agent = new AgentBuilder()
+    .WithOpenAi(apiKey)
+    .WithMemory(memoryService)
+    .WithEmbeddingProvider(embeddingProvider)
+    .WithVectorStore(vectorStore)
+    .WithSkills("./skills")      // Load agent skills
+    .WithSoul("./SOUL.md")        // Load agent identity
+    .Build();
 ```
 
 ## Benefits of Semantic Memory
