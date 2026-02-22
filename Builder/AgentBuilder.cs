@@ -2,6 +2,7 @@ using Agentic.Abstractions;
 using Agentic.Core;
 using Agentic.Middleware;
 using Agentic.Providers.OpenAi;
+using Agentic.Stores;
 
 namespace Agentic.Builder;
 
@@ -10,6 +11,7 @@ public sealed class AgentBuilder
     private IModelProvider? _modelProvider;
     private IMemoryService? _memoryService;
     private IEmbeddingProvider? _embeddingProvider;
+    private IVectorStore? _vectorStore;
     private IAssistantContextFactory? _contextFactory;
     private readonly List<IAssistantMiddleware> _middlewares = [];
     private readonly List<ITool> _tools = [];
@@ -42,6 +44,18 @@ public sealed class AgentBuilder
     public AgentBuilder WithMemory(IMemoryService memoryService)
     {
         _memoryService = memoryService;
+        return this;
+    }
+
+    public AgentBuilder WithMemory(string dbPath, IVectorStore? vectorStore = null)
+    {
+        _memoryService = new SqliteMemoryService(dbPath, vectorStore);
+        return this;
+    }
+
+    public AgentBuilder WithVectorStore(IVectorStore vectorStore)
+    {
+        _vectorStore = vectorStore;
         return this;
     }
 
@@ -80,6 +94,11 @@ public sealed class AgentBuilder
         if (_modelProvider is null)
         {
             throw new InvalidOperationException("A model provider is required. Call WithModelProvider first.");
+        }
+
+        if (_memoryService is null && _vectorStore is not null)
+        {
+            _memoryService = new SqliteMemoryService(_vectorStore);
         }
 
         var pipeline = new List<IAssistantMiddleware>(_middlewares);

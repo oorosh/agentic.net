@@ -8,6 +8,7 @@ using Agentic.Builder;
 using Agentic.Core;
 using Agentic.Middleware;
 using Agentic.Providers.OpenAi;
+using Agentic.Stores;
 using System.IO;
 using Xunit;
 
@@ -547,5 +548,166 @@ public class AgentBuilderTests
                 return _fn(ctx);
             }
         }
+    }
+
+    [Fact]
+    public async Task InMemoryVectorStore_initializes_and_stores_vectors()
+    {
+        var store = new InMemoryVectorStore(dimensions: 3);
+        await store.InitializeAsync();
+
+        await store.UpsertAsync("vec1", [1f, 0f, 0f]);
+        await store.UpsertAsync("vec2", [0f, 1f, 0f]);
+
+        var results = await store.SearchAsync([1f, 0f, 0f], topK: 2);
+
+        Assert.Equal(2, results.Count);
+        Assert.Equal("vec1", results[0].Id);
+        Assert.Equal(1f, results[0].Score, 5);
+    }
+
+    [Fact]
+    public async Task InMemoryVectorStore_search_returns_similar_by_cosine_similarity()
+    {
+        var store = new InMemoryVectorStore(dimensions: 2);
+        await store.InitializeAsync();
+
+        await store.UpsertAsync("a", [1f, 0f]);
+        await store.UpsertAsync("b", [0.9f, 0.1f]);
+        await store.UpsertAsync("c", [0f, 1f]);
+
+        var results = await store.SearchAsync([1f, 0f], topK: 2);
+
+        Assert.Equal("a", results[0].Id);
+        Assert.Equal("b", results[1].Id);
+        Assert.True(results[0].Score > results[1].Score);
+    }
+
+    [Fact]
+    public async Task InMemoryVectorStore_delete_removes_vector()
+    {
+        var store = new InMemoryVectorStore(dimensions: 3);
+        await store.InitializeAsync();
+
+        await store.UpsertAsync("vec1", [1f, 0f, 0f]);
+        await store.DeleteAsync("vec1");
+
+        var results = await store.SearchAsync([1f, 0f, 0f], topK: 5);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task InMemoryVectorStore_delete_all_clears_all()
+    {
+        var store = new InMemoryVectorStore(dimensions: 3);
+        await store.InitializeAsync();
+
+        await store.UpsertAsync("vec1", [1f, 0f, 0f]);
+        await store.UpsertAsync("vec2", [0f, 1f, 0f]);
+        await store.DeleteAllAsync();
+
+        var results = await store.SearchAsync([1f, 0f, 0f], topK: 5);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task InMemoryVectorStore_throws_on_dimension_mismatch()
+    {
+        var store = new InMemoryVectorStore(dimensions: 3);
+        await store.InitializeAsync();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.UpsertAsync("vec", [1f, 2f]));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SearchAsync([1f, 2f], topK: 5));
+    }
+
+    [Fact]
+    public async Task SqliteMemoryService_with_vector_store_stores_and_retrieves()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var vectorStore = new InMemoryVectorStore(dimensions: 3);
+            var sqlite = new SqliteMemoryService(tempFile, vectorStore);
+            await sqlite.InitializeAsync();
+
+            await sqlite.StoreMessageAsync("1", "hello world");
+            await sqlite.StoreEmbeddingAsync("1", [1f, 0f, 0f]);
+
+            var results = await sqlite.RetrieveSimilarAsync([1f, 0f, 0f], topK: 5);
+
+            Assert.Single(results);
+            Assert.Equal("hello world", results[0].Content);
+        }
+        finally
+        {
+            try { File.Delete(tempFile); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task SqliteMemoryService_with_vector_store_searches_semantically()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var vectorStore = new InMemoryVectorStore(dimensions: 3);
+            var sqlite = new SqliteMemoryService(tempFile, vectorStore);
+            await sqlite.InitializeAsync();
+
+            await sqlite.StoreMessageAsync("1", "I love programming in C#");
+            await sqlite.StoreEmbeddingAsync("1", [1f, 0.5f, 0.2f]);
+            await sqlite.StoreMessageAsync("2", "What's the weather today?");
+            await sqlite.StoreEmbeddingAsync("2", [0f, 0f, 1f]);
+
+            var results = await sqlite.RetrieveSimilarAsync([0.9f, 0.5f, 0.2f], topK: 1);
+
+            Assert.Single(results);
+            Assert.Contains("C#", results[0].Content);
+        }
+        finally
+        {
+            try { File.Delete(tempFile); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task AgentBuilder_with_vector_store_creates_memory_middleware_with_embedding_provider()
+    {
+        var apiKey = "test-key";
+        var embeddingProvider = new Agentic.Providers.OpenAi.OpenAiEmbeddingProvider(apiKey);
+        var vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+
+        var assistant = new AgentBuilder()
+            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .WithMemory(new InMemoryMemoryService())
+            .WithEmbeddingProvider(embeddingProvider)
+            .WithVectorStore(vectorStore)
+            .Build();
+
+        await assistant.InitializeAsync();
+        Assert.NotNull(assistant);
+    }
+
+    [Fact]
+    public async Task AgentBuilder_with_vector_store_only_auto_creates_sqlite_memory()
+    {
+        var vectorStore = new InMemoryVectorStore(dimensions: 1536);
+
+        var assistant = new AgentBuilder()
+            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .WithVectorStore(vectorStore)
+            .Build();
+
+        await assistant.InitializeAsync();
+        Assert.NotNull(assistant);
+    }
+
+    [Fact]
+    public void InMemoryVectorStore_dimensions_property_returns_configured_value()
+    {
+        var store = new InMemoryVectorStore(dimensions: 768);
+        Assert.Equal(768, store.Dimensions);
     }
 }

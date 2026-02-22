@@ -3,31 +3,29 @@ using System.IO;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Agentic.Abstractions;
+using Agentic.Stores;
 
 namespace Agentic.Core;
 
-/// <summary>
-/// Very small SQLite-backed <see cref="IMemoryService"/> implementation used
-/// by the open-source samples.  It stores each message as a row in a simple
-/// table and performs tokenized LIKE searches when retrieving relevant data.
-/// This is intentionally minimal; real applications may want to use FTS or a
-/// more sophisticated vector index.
-/// </summary>
 public sealed class SqliteMemoryService : IMemoryService, IDisposable
 {
     private readonly string _connectionString;
+    private readonly IVectorStore? _vectorStore;
     private SqliteConnection? _connection;
     private bool _initialized;
 
-    public SqliteMemoryService(string dbPath)
+    public SqliteMemoryService(string dbPath, IVectorStore? vectorStore = null)
     {
         _connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = dbPath
         }.ToString();
+        _vectorStore = vectorStore;
     }
 
-    public SqliteMemoryService() : this(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "memory.db")) { }
+    public SqliteMemoryService(IVectorStore vectorStore) : this(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "memory.db"), vectorStore) { }
+
+    public SqliteMemoryService() : this(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "memory.db"), null) { }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -43,7 +41,6 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
         ";
         await cmd.ExecuteNonQueryAsync(cancellationToken);
 
-        // Add embedding column if not exists
         try
         {
             var alterCmd = _connection.CreateCommand();
@@ -52,7 +49,11 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
         }
         catch (SqliteException)
         {
-            // Column already exists, ignore
+        }
+
+        if (_vectorStore is not null)
+        {
+            await _vectorStore.InitializeAsync(cancellationToken);
         }
 
         _initialized = true;
@@ -73,11 +74,6 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
     {
         if (!_initialized) throw new InvalidOperationException("Memory service not initialized.");
 
-        // tokenize the query; if there is nothing to search we will fall back to
-        // returning the most recent rows.  later we also fall back when the
-        // filtered search yields zero results – this makes the service behave
-        // more like “give me something from memory” which is what most users
-        // expect.
         var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         List<string> list = new();
@@ -119,7 +115,6 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
 
         if (list.Count == 0)
         {
-            // no matches; fall back to most recent entries
             var cmd2 = _connection!.CreateCommand();
             cmd2.CommandText = "SELECT content FROM memory ORDER BY rowid DESC LIMIT $limit";
             cmd2.Parameters.AddWithValue("$limit", topK);
@@ -138,8 +133,14 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
     {
         if (!_initialized) throw new InvalidOperationException("Memory service not initialized.");
 
+        if (_vectorStore is not null)
+        {
+            await _vectorStore.UpsertAsync(id, embedding, cancellationToken);
+            return;
+        }
+
         var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "UPDATE memory SET embedding = $embedding WHERE id = $id;";
+        cmd.CommandText = "INSERT OR REPLACE INTO memory(id, content, embedding) VALUES($id, COALESCE((SELECT content FROM memory WHERE id = $id), ''), $embedding);";
         cmd.Parameters.AddWithValue("$id", id);
         cmd.Parameters.AddWithValue("$embedding", JsonSerializer.Serialize(embedding));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
@@ -148,6 +149,21 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
     public async Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(float[] queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
     {
         if (!_initialized) throw new InvalidOperationException("Memory service not initialized.");
+
+        if (_vectorStore is not null)
+        {
+            var results = await _vectorStore.SearchAsync(queryEmbedding, topK, cancellationToken);
+            var contents = new List<(string Content, float Score)>();
+            foreach (var (id, _, score) in results)
+            {
+                var content = await GetContentByIdAsync(id, cancellationToken);
+                if (content is not null)
+                {
+                    contents.Add((content, score));
+                }
+            }
+            return contents;
+        }
 
         var cmd = _connection!.CreateCommand();
         cmd.CommandText = "SELECT content, embedding FROM memory WHERE embedding IS NOT NULL;";
@@ -167,6 +183,15 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
             .OrderByDescending(x => x.Score)
             .Take(topK)
             .ToList();
+    }
+
+    private async Task<string?> GetContentByIdAsync(string id, CancellationToken cancellationToken)
+    {
+        var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "SELECT content FROM memory WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        return result as string;
     }
 
     private static float CosineSimilarity(float[] a, float[] b)
@@ -190,5 +215,9 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
     public void Dispose()
     {
         _connection?.Dispose();
+        if (_vectorStore is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
     }
 }

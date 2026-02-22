@@ -2,11 +2,18 @@ using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
 using Agentic.Providers.OpenAi;
+using Agentic.Stores;
 
 // PersonalAssistant sample: uses the OpenAI Chat Completion API as the
-// model provider and persists conversation memory into a simple SQLite
-// database with semantic embeddings for better recall.  Set the environment
-// variable OPENAI_API_KEY before running the program.
+// model provider and persists conversation memory into SQLite with optional
+// vector storage for semantic embeddings.
+//
+// Environment variables:
+//   OPENAI_API_KEY - Required for OpenAI API
+//   OPENAI_MODEL - Optional, defaults to gpt-4o-mini
+//   USE_EMBEDDINGS - Set to "true" to enable semantic embeddings
+//   USE_PGVECTOR - Set to "true" to use PostgreSQL pgvector (requires PGVECTOR_CONNECTION_STRING)
+//   PGVECTOR_CONNECTION_STRING - PostgreSQL connection string (when USE_PGVECTOR=true)
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 if (string.IsNullOrWhiteSpace(apiKey))
@@ -17,16 +24,40 @@ if (string.IsNullOrWhiteSpace(apiKey))
 
 var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
 
-using var memoryService = new SqliteMemoryService();
-await memoryService.InitializeAsync();
-
 IEmbeddingProvider? embeddingProvider = null;
+IVectorStore? vectorStore = null;
 var useEmbeddings = Environment.GetEnvironmentVariable("USE_EMBEDDINGS")?.ToLower() == "true";
+var usePgVector = Environment.GetEnvironmentVariable("USE_PGVECTOR")?.ToLower() == "true";
+
 if (useEmbeddings)
 {
     embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
     await embeddingProvider.InitializeAsync();
+
+    if (usePgVector)
+    {
+        var connString = Environment.GetEnvironmentVariable("PGVECTOR_CONNECTION_STRING");
+        if (!string.IsNullOrWhiteSpace(connString))
+        {
+            vectorStore = new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
+            Console.WriteLine("(using pgvector for semantic memory)");
+        }
+        else
+        {
+            Console.WriteLine("Warning: USE_PGVECTOR=true but PGVECTOR_CONNECTION_STRING not set, falling back to in-memory");
+            vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+        }
+    }
+    else
+    {
+        vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+    }
 }
+
+using var memoryService = vectorStore is not null 
+    ? new SqliteMemoryService(vectorStore) 
+    : new SqliteMemoryService();
+await memoryService.InitializeAsync();
 
 var restored = await memoryService.RetrieveRelevantAsync(string.Empty, topK: 100);
 if (restored.Count > 0)
@@ -40,7 +71,9 @@ var builder = new AgentBuilder()
 
 if (embeddingProvider != null)
 {
-    builder = builder.WithEmbeddingProvider(embeddingProvider);
+    builder = builder
+        .WithEmbeddingProvider(embeddingProvider)
+        .WithVectorStore(vectorStore!);
     Console.WriteLine("(embeddings enabled for semantic memory)");
 }
 

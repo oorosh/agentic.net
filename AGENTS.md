@@ -102,6 +102,7 @@ Agentic.NET/
 ├── Core/             # Runtime types (Agent, AgentContext, ChatMessage)
 ├── Middleware/       # Middleware contracts and implementations
 ├── Providers/        # Model provider implementations (OpenAI)
+├── Stores/           # Vector store implementations (PgVector, InMemory)
 ├── samples/          # Usage examples
 └── tests/            # Unit tests
 ```
@@ -110,6 +111,7 @@ Agentic.NET/
 - **`IAgentModel`**: Underlying LLM/chat model abstraction
 - **`IMemoryService`**: Memory storage/retrieval with optional embeddings
 - **`IEmbeddingProvider`**: Generates embeddings for semantic memory search
+- **`IVectorStore`**: Pluggable vector storage for semantic search (pgvector, in-memory, etc.)
 - **`IAssistantMiddleware`**: Pre/post-process conversation
 - **`ITool`**: Executable function the model can invoke
 - **`IModelProvider`**: Factory for creating model instances
@@ -123,6 +125,8 @@ Agentic.NET/
 - `OPENAI_API_KEY`: Required for OpenAI samples
 - `OPENAI_MODEL`: Optional, defaults to `gpt-4o-mini`
 - `USE_EMBEDDINGS`: Optional, set to `true` to enable semantic embeddings in memory samples
+- `USE_PGVECTOR`: Optional, set to `true` to use PostgreSQL pgvector instead of in-memory
+- `PGVECTOR_CONNECTION_STRING`: PostgreSQL connection string (required when USE_PGVECTOR=true)
 
 ## Embeddings and Semantic Memory
 
@@ -131,28 +135,63 @@ Agentic.NET supports semantic memory through embeddings for improved context rel
 ### Adding Embeddings
 1. Implement `IEmbeddingProvider` (e.g., `OpenAiEmbeddingProvider`)
 2. Configure in `AgentBuilder`: `.WithEmbeddingProvider(provider)`
-3. Embeddings are automatically generated and stored for each message
-4. Retrieval uses cosine similarity for semantic matching
+3. Optionally add a vector store: `.WithVectorStore(vectorStore)`
+4. Embeddings are automatically generated and stored for each message
+5. Retrieval uses cosine similarity for semantic matching
 
-### Example
+### Vector Storage Options
+
+#### In-Memory (Development)
 ```csharp
 var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
+await embeddingProvider.InitializeAsync();
+
+var vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+
 var assistant = new AgentBuilder()
     .WithOpenAi(apiKey)
-    .WithMemory(new SqliteMemoryService("/path/to/memory.db"))
     .WithEmbeddingProvider(embeddingProvider)
+    .WithVectorStore(vectorStore)
+    .WithMemory(new SqliteMemoryService())
     .Build();
 ```
 
-Or use the default location (app base directory):
-```csharp
-.WithMemory(new SqliteMemoryService())
+#### PgVector (Production)
+Requires PostgreSQL with pgvector extension installed:
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
+
+```csharp
+var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
+await embeddingProvider.InitializeAsync();
+
+var vectorStore = new PgVectorStore(
+    "Host=localhost;Database=memory",
+    dimensions: embeddingProvider.Dimensions
+);
+
+var assistant = new AgentBuilder()
+    .WithOpenAi(apiKey)
+    .WithEmbeddingProvider(embeddingProvider)
+    .WithVectorStore(vectorStore)
+    .WithMemory(new SqliteMemoryService(vectorStore))
+    .Build();
+```
+
+#### Adding Custom Vector Stores
+Implement `IVectorStore` interface to add support for other vector databases:
+- Azure AI Search
+- Qudrant
+- Pinecone
+- Milvus
+- Weaviate
 
 ### Benefits
 - Better recall of semantically similar conversations
 - Reduced false positives from keyword matching
 - Pluggable providers for different embedding models
+- Pluggable vector storage for production scalability
 
 ## Common Tasks
 
