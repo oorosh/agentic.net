@@ -12,7 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../Agentic.NET.csproj" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="7.0.11" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
   </ItemGroup>
 
 </Project>
