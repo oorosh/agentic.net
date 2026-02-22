@@ -243,16 +243,16 @@ Step-by-step instructions for the agent...
 
 ### Loading Skills
 ```csharp
-// From skills directory
+// From default ./skills directory in app base
 var agent = new AgentBuilder()
     .WithOpenAi(apiKey)
-    .WithSkills("./skills")  // Load all skills from directory
+    .WithSkills()  // loads from ./skills/
     .Build();
 
-// Or use WithAgent to load both skills and SOUL.md from same folder
+// From custom directory
 var agent = new AgentBuilder()
     .WithOpenAi(apiKey)
-    .WithAgent("./my-agent")  // loads skills from ./my-agent/*/ and SOUL.md from ./my-agent/
+    .WithSkills("./my-skills")  // Load all skills from directory
     .Build();
 
 await agent.InitializeAsync();
@@ -332,7 +332,8 @@ var agent = new AgentBuilder()
     .WithMemory(new SqliteMemoryService(vectorStore))
     .WithEmbeddingProvider(embeddingProvider)
     .WithVectorStore(vectorStore)
-    .WithAgent("./my-agent")     // Load skills and SOUL.md from folder
+    .WithSkills("./skills")   // Load agent skills
+    .WithSoul("./SOUL.md")    // Load agent identity
     .WithTool(new MyCustomTool())
     .Build();
 

@@ -74,6 +74,12 @@ public sealed class AgentBuilder
         return this;
     }
 
+    public AgentBuilder WithSkills()
+    {
+        _skillLoader = new FileSystemSkillLoader(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "skills"));
+        return this;
+    }
+
     public AgentBuilder WithSkills(string skillsDirectory)
     {
         _skillLoader = new FileSystemSkillLoader(skillsDirectory);
@@ -86,10 +92,9 @@ public sealed class AgentBuilder
         return this;
     }
 
-    public AgentBuilder WithAgent(string agentDirectory)
+    public AgentBuilder WithSoul()
     {
-        _skillLoader = new FileSystemSkillLoader(agentDirectory);
-        _soulLoader = new FileSystemSoulLoader(agentDirectory);
+        _soulLoader = new FileSystemSoulLoader(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SOUL.md"));
         return this;
     }
 

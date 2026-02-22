@@ -119,14 +119,15 @@ if (embeddingProvider != null)
 You can configure skills and SOUL.md identity using individual methods or a single call:
 
 ```csharp
-// Single call - load both from same directory
+// Load from default paths (./skills/ and ./SOUL.md in app directory)
 var agent = new AgentBuilder()
     .WithOpenAi(apiKey)
     .WithMemory(memoryService)
-    .WithAgent("./my-agent")  // loads skills and SOUL.md from folder
+    .WithSkills()
+    .WithSoul()
     .Build();
 
-// Or individually
+// Or specify custom paths
 var agent = new AgentBuilder()
     .WithOpenAi(apiKey)
     .WithMemory(memoryService)
