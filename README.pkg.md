@@ -10,7 +10,7 @@ available in the GitHub repository.
 ## Install
 
 ```bash
-dotnet add package Agentic.NET --version 0.1.1-preview
+dotnet add package Agentic.NET
 ```
 
 ## Quick example

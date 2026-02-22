@@ -20,8 +20,7 @@ Designed for clarity and composability, the API lets your app stay in control wh
 The package is published on nuget.org and can be added by running:
 
 ```bash
-# pick the version you want; 0.1.1-preview is current
-dotnet add package Agentic.NET --version 0.1.1-preview (preview release)
+dotnet add package Agentic.NET
 ```
 
 NuGet clients (Visual Studio, Rider, CLI) will pull the compiled library and dependencies automatically.
