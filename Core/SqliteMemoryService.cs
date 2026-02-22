@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Agentic.Abstractions;
 
@@ -38,6 +39,18 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
             );
         ";
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // Add embedding column if not exists
+        try
+        {
+            var alterCmd = _connection.CreateCommand();
+            alterCmd.CommandText = "ALTER TABLE memory ADD COLUMN embedding TEXT;";
+            await alterCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (SqliteException)
+        {
+            // Column already exists, ignore
+        }
 
         _initialized = true;
     }
@@ -116,6 +129,59 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
         }
 
         return list;
+    }
+
+    public async Task StoreEmbeddingAsync(string id, float[] embedding, CancellationToken cancellationToken = default)
+    {
+        if (!_initialized) throw new InvalidOperationException("Memory service not initialized.");
+
+        var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "UPDATE memory SET embedding = $embedding WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.Parameters.AddWithValue("$embedding", JsonSerializer.Serialize(embedding));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(float[] queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
+    {
+        if (!_initialized) throw new InvalidOperationException("Memory service not initialized.");
+
+        var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "SELECT content, embedding FROM memory WHERE embedding IS NOT NULL;";
+
+        var similarities = new List<(string Content, float Score)>();
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var content = reader.GetString(0);
+            var embeddingJson = reader.GetString(1);
+            var embedding = JsonSerializer.Deserialize<float[]>(embeddingJson)!;
+            var score = CosineSimilarity(queryEmbedding, embedding);
+            similarities.Add((content, score));
+        }
+
+        return similarities
+            .OrderByDescending(x => x.Score)
+            .Take(topK)
+            .ToList();
+    }
+
+    private static float CosineSimilarity(float[] a, float[] b)
+    {
+        if (a.Length != b.Length)
+        {
+            throw new ArgumentException("Embedding dimensions must match.");
+        }
+
+        float dot = 0, normA = 0, normB = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+
+        return dot / (MathF.Sqrt(normA) * MathF.Sqrt(normB));
     }
 
     public void Dispose()

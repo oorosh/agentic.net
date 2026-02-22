@@ -3,12 +3,29 @@ using Agentic.Builder;
 using Agentic.Core;
 using Agentic.Middleware;
 
-var assistant = new AgentBuilder()
+// MemoryAndMiddleware sample: demonstrates memory services and custom middleware.
+// Now supports embeddings for semantic memory retrieval (set OPENAI_API_KEY and USE_EMBEDDINGS=true).
+
+var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+IEmbeddingProvider? embeddingProvider = null;
+if (!string.IsNullOrWhiteSpace(apiKey) && Environment.GetEnvironmentVariable("USE_EMBEDDINGS")?.ToLower() == "true")
+{
+    embeddingProvider = new Agentic.Providers.OpenAi.OpenAiEmbeddingProvider(apiKey);
+    await embeddingProvider.InitializeAsync();
+}
+
+var builder = new AgentBuilder()
     .WithModelProvider(new DemoModelProvider())
     .WithMemory(new InMemoryMemoryService())
     .WithContextFactory(new DemoContextFactory())
-    .UseMiddleware(new ToneMiddleware())
-    .Build();
+    .UseMiddleware(new ToneMiddleware());
+
+if (embeddingProvider != null)
+{
+    builder = builder.WithEmbeddingProvider(embeddingProvider);
+}
+
+var assistant = builder.Build();
 
 Console.WriteLine("== Memory + Middleware Sample ==\n");
 

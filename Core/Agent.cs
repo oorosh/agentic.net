@@ -8,6 +8,7 @@ public sealed class Agent
     private const int MaxToolCallDepth = 12;
     private readonly IAgentModel _model;
     private readonly IMemoryService? _memoryService;
+    private readonly IEmbeddingProvider? _embeddingProvider;
     private readonly IAssistantContextFactory _contextFactory;
     private readonly IReadOnlyList<IAssistantMiddleware> _middlewares;
     private readonly IReadOnlyDictionary<string, ITool> _tools;
@@ -17,12 +18,14 @@ public sealed class Agent
     internal Agent(
         IAgentModel model,
         IMemoryService? memoryService,
+        IEmbeddingProvider? embeddingProvider,
         IAssistantContextFactory contextFactory,
         IReadOnlyList<IAssistantMiddleware> middlewares,
         IReadOnlyDictionary<string, ITool> tools)
     {
         _model = model;
         _memoryService = memoryService;
+        _embeddingProvider = embeddingProvider;
         _contextFactory = contextFactory;
         _middlewares = middlewares;
         _tools = tools;
@@ -40,6 +43,11 @@ public sealed class Agent
         if (_memoryService is not null)
         {
             await _memoryService.InitializeAsync(cancellationToken);
+        }
+
+        if (_embeddingProvider is not null)
+        {
+            await _embeddingProvider.InitializeAsync(cancellationToken);
         }
 
         _initialized = true;
@@ -112,8 +120,18 @@ public sealed class Agent
 
         if (_memoryService is not null)
         {
-            await _memoryService.StoreMessageAsync(Guid.NewGuid().ToString("N"), input, cancellationToken);
-            await _memoryService.StoreMessageAsync(Guid.NewGuid().ToString("N"), response.Content, cancellationToken);
+            var userId = Guid.NewGuid().ToString("N");
+            await _memoryService.StoreMessageAsync(userId, input, cancellationToken);
+            var responseId = Guid.NewGuid().ToString("N");
+            await _memoryService.StoreMessageAsync(responseId, response.Content, cancellationToken);
+
+            if (_embeddingProvider is not null)
+            {
+                var userEmbedding = await _embeddingProvider.GenerateEmbeddingAsync(input, cancellationToken);
+                await _memoryService.StoreEmbeddingAsync(userId, userEmbedding, cancellationToken);
+                var responseEmbedding = await _embeddingProvider.GenerateEmbeddingAsync(response.Content, cancellationToken);
+                await _memoryService.StoreEmbeddingAsync(responseId, responseEmbedding, cancellationToken);
+            }
         }
 
         return response.Content;

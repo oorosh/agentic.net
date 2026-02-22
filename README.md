@@ -92,21 +92,71 @@ If memory is configured, `MemoryMiddleware` is added automatically unless you ad
 
 ## Samples
 
-- `samples/BasicChat` — minimal chat loop
-- `samples/MemoryAndMiddleware` — memory + custom middleware + context factory
-- `samples/ToolCalling` — OpenAI function-style tool calls (`get_weather`)
-- `samples/PersonalAssistant` — OpenAI + SQLite persistent memory
+Agentic.NET includes several runnable samples to demonstrate different features and integration patterns. Each sample includes a detailed README.md explaining what it demonstrates.
 
-Run:
+### Basic Chat (`samples/BasicChat`)
+
+The simplest example showing how to create an agent with a custom model provider. Demonstrates:
+- Basic `AgentBuilder` usage
+- Implementing `IModelProvider` and `IAgentModel`
+- Interactive chat loop with console input/output
+- No external dependencies required
 
 ```bash
 dotnet run --project samples/BasicChat/BasicChat.csproj
-dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
-dotnet run --project samples/ToolCalling/ToolCalling.csproj
-dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
 ```
 
-For OpenAI samples, set `OPENAI_API_KEY` first.
+### Memory and Middleware (`samples/MemoryAndMiddleware`)
+
+Shows how to add memory and custom middleware to enhance agent behavior. Demonstrates:
+- Memory services with `IMemoryService`
+- Custom middleware implementation with `IAssistantMiddleware`
+- Context factory for additional processing
+- Optional semantic embeddings for better memory recall
+
+```bash
+# Without embeddings
+dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
+
+# With embeddings (requires OPENAI_API_KEY)
+USE_EMBEDDINGS=true OPENAI_API_KEY=your_key dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
+```
+
+### Tool Calling (`samples/ToolCalling`)
+
+Demonstrates OpenAI function calling capabilities. Shows:
+- Registering tools with the OpenAI provider
+- Implementing `ITool` for executable functions
+- How the model can invoke tools during conversations
+- Interactive tool usage with a weather example
+
+```bash
+OPENAI_API_KEY=your_key dotnet run --project samples/ToolCalling/ToolCalling.csproj
+```
+
+### Personal Assistant (`samples/PersonalAssistant`)
+
+A complete AI assistant with persistent memory and real OpenAI integration. Features:
+- SQLite-based persistent conversation storage
+- Optional semantic embeddings for enhanced recall
+- Memory restoration across application restarts
+- Full OpenAI Chat Completion API integration
+
+```bash
+# Without embeddings
+OPENAI_API_KEY=your_key dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
+
+# With embeddings
+USE_EMBEDDINGS=true OPENAI_API_KEY=your_key dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
+```
+
+## Environment Variables
+
+Samples that use OpenAI require the following environment variables:
+
+- `OPENAI_API_KEY`: Your OpenAI API key (required for OpenAI samples)
+- `OPENAI_MODEL`: Model to use (optional, defaults to `gpt-4o-mini`)
+- `USE_EMBEDDINGS`: Set to `true` to enable semantic embeddings in memory samples (optional)
 
 ## Repository layout
 

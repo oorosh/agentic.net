@@ -3,7 +3,7 @@ using Agentic.Core;
 
 namespace Agentic.Middleware;
 
-public sealed class MemoryMiddleware(IMemoryService memoryService) : IAssistantMiddleware
+public sealed class MemoryMiddleware(IMemoryService memoryService, IEmbeddingProvider? embeddingProvider = null) : IAssistantMiddleware
 {
     public async Task<AgentResponse> InvokeAsync(AgentContext context, AgentHandler next, CancellationToken cancellationToken = default)
     {
@@ -16,7 +16,18 @@ public sealed class MemoryMiddleware(IMemoryService memoryService) : IAssistantM
         string query = initial ? string.Empty : context.Input;
         int topK = initial ? 100 : 5; // larger window on first turn
 
-        var memories = await memoryService.RetrieveRelevantAsync(query, topK: topK, cancellationToken);
+        IReadOnlyList<string> memories;
+
+        if (!initial && embeddingProvider != null)
+        {
+            var queryEmbedding = await embeddingProvider.GenerateEmbeddingAsync(query, cancellationToken);
+            var similar = await memoryService.RetrieveSimilarAsync(queryEmbedding, topK, cancellationToken);
+            memories = similar.Select(x => x.Content).ToList();
+        }
+        else
+        {
+            memories = await memoryService.RetrieveRelevantAsync(query, topK, cancellationToken);
+        }
 
         if (memories.Count > 0)
         {

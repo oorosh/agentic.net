@@ -9,6 +9,7 @@ public sealed class AgentBuilder
 {
     private IModelProvider? _modelProvider;
     private IMemoryService? _memoryService;
+    private IEmbeddingProvider? _embeddingProvider;
     private IAssistantContextFactory? _contextFactory;
     private readonly List<IAssistantMiddleware> _middlewares = [];
     private readonly List<ITool> _tools = [];
@@ -41,6 +42,12 @@ public sealed class AgentBuilder
     public AgentBuilder WithMemory(IMemoryService memoryService)
     {
         _memoryService = memoryService;
+        return this;
+    }
+
+    public AgentBuilder WithEmbeddingProvider(IEmbeddingProvider embeddingProvider)
+    {
+        _embeddingProvider = embeddingProvider;
         return this;
     }
 
@@ -79,7 +86,7 @@ public sealed class AgentBuilder
 
         if (_memoryService is not null && pipeline.All(middleware => middleware is not MemoryMiddleware))
         {
-            pipeline.Insert(0, new MemoryMiddleware(_memoryService));
+            pipeline.Insert(0, new MemoryMiddleware(_memoryService, _embeddingProvider));
         }
 
         var toolLookup = new Dictionary<string, ITool>(StringComparer.OrdinalIgnoreCase);
@@ -94,6 +101,7 @@ public sealed class AgentBuilder
         return new Agent(
             _modelProvider.CreateModel(),
             _memoryService,
+            _embeddingProvider,
             _contextFactory ?? new DefaultAssistantContextFactory(),
             pipeline,
             toolLookup);

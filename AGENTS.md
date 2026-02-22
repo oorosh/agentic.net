@@ -108,7 +108,8 @@ Agentic.NET/
 
 ### Key Interfaces
 - **`IAgentModel`**: Underlying LLM/chat model abstraction
-- **`IMemoryService`**: Memory storage/retrieval
+- **`IMemoryService`**: Memory storage/retrieval with optional embeddings
+- **`IEmbeddingProvider`**: Generates embeddings for semantic memory search
 - **`IAssistantMiddleware`**: Pre/post-process conversation
 - **`ITool`**: Executable function the model can invoke
 - **`IModelProvider`**: Factory for creating model instances
@@ -121,6 +122,32 @@ Agentic.NET/
 ### Environment Variables (for samples)
 - `OPENAI_API_KEY`: Required for OpenAI samples
 - `OPENAI_MODEL`: Optional, defaults to `gpt-4o-mini`
+- `USE_EMBEDDINGS`: Optional, set to `true` to enable semantic embeddings in memory samples
+
+## Embeddings and Semantic Memory
+
+Agentic.NET supports semantic memory through embeddings for improved context relevance:
+
+### Adding Embeddings
+1. Implement `IEmbeddingProvider` (e.g., `OpenAiEmbeddingProvider`)
+2. Configure in `AgentBuilder`: `.WithEmbeddingProvider(provider)`
+3. Embeddings are automatically generated and stored for each message
+4. Retrieval uses cosine similarity for semantic matching
+
+### Example
+```csharp
+var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
+var assistant = new AgentBuilder()
+    .WithOpenAi(apiKey)
+    .WithMemory(new SqliteMemoryService("memory.db"))
+    .WithEmbeddingProvider(embeddingProvider)
+    .Build();
+```
+
+### Benefits
+- Better recall of semantically similar conversations
+- Reduced false positives from keyword matching
+- Pluggable providers for different embedding models
 
 ## Common Tasks
 

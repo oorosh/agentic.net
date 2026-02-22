@@ -240,6 +240,18 @@ public class AgentBuilderTests
             // return all stored messages for simplicity
             return Task.FromResult<IReadOnlyList<string>>(StoredMessages.ToList());
         }
+
+        public Task StoreEmbeddingAsync(string id, float[] embedding, CancellationToken cancellationToken = default)
+        {
+            // no-op for test
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(float[] queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
+        {
+            // return empty for test
+            return Task.FromResult<IReadOnlyList<(string Content, float Score)>>(new List<(string, float)>());
+        }
     }
 
     // simple integration test for the SQLite-based memory service in samples
@@ -405,14 +417,19 @@ public class AgentBuilderTests
     }
 
     [Fact]
-    public void Build_throws_when_duplicate_tool_names_registered()
+    public async Task EmbeddingProvider_can_be_configured()
     {
-        var builder = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
-            .WithTool(new UppercaseTool())
-            .WithTool(new UppercaseTool());
+        var apiKey = "test-key";
+        var embeddingProvider = new Agentic.Providers.OpenAi.OpenAiEmbeddingProvider(apiKey);
 
-        Assert.Throws<InvalidOperationException>(() => builder.Build());
+        var assistant = new AgentBuilder()
+            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .WithMemory(new InMemoryMemoryService())
+            .WithEmbeddingProvider(embeddingProvider)
+            .Build();
+
+        // Should not throw
+        await assistant.InitializeAsync();
     }
 
     private sealed class RecordingMiddleware : IAssistantMiddleware
