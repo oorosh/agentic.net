@@ -232,6 +232,23 @@ OPENAI_API_KEY=your_key dotnet run --project samples/ErrorHandlingMiddleware/Err
 
 **See:** [ErrorHandlingMiddleware README](samples/ErrorHandlingMiddleware/README.md)
 
+#### ResponseValidationMiddleware (`samples/ResponseValidationMiddleware`)
+
+Demonstrates LLM output quality validation and retry logic. Shows:
+- Validates responses AFTER LLM generation (post-processing)
+- Detects common "stupid" response patterns
+- Automatic retry up to 2 times on validation failure
+- Fallback responses when validation repeatedly fails
+- Guards against incomplete, hallucinated, or nonsensical responses
+
+```bash
+OPENAI_API_KEY=your_key dotnet run --project samples/ResponseValidationMiddleware/ResponseValidationMiddleware.csproj
+```
+
+**See:** [ResponseValidationMiddleware README](samples/ResponseValidationMiddleware/README.md)
+
+**See:** [Response Validation Patterns Guide](docs/response-validation-patterns.md)
+
 ## Environment Variables
 
 Samples that use OpenAI require the following environment variables:
