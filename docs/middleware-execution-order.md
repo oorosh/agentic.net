@@ -174,6 +174,95 @@ PromptGuardMiddleware.InvokeAsync()
   → Returns filtered response to user
 ```
 
+## Two Key Patterns
+
+### Pattern 1: Short-Circuit (Input Validation/Gating)
+
+Use this when you want to **prevent downstream layers from executing**:
+
+```csharp
+public Task<AgentResponse> InvokeAsync(AgentContext context, AgentHandler next, CancellationToken cancellationToken = default)
+{
+    if (!IsValid(context.Input))
+    {
+        // Return early WITHOUT calling next()
+        // This prevents all downstream layers (including LLM) from executing
+        return Task.FromResult(new AgentResponse("Invalid input rejected"));
+    }
+    
+    // Only called if validation passes
+    return next(context, cancellationToken);
+}
+```
+
+**Benefits:**
+- Saves costs by avoiding LLM calls for invalid inputs
+- Improves performance for gate-keeping logic
+- Perfect for input validation and compliance checks
+
+### Pattern 2: Filter (Output Validation/Modification)
+
+Use this when you want to **allow downstream layers to execute, then modify the result**:
+
+```csharp
+public async Task<AgentResponse> InvokeAsync(AgentContext context, AgentHandler next, CancellationToken cancellationToken = default)
+{
+    // Always call next() to allow deeper layers to execute
+    var response = await next(context, cancellationToken);
+    
+    // Post-processing: modify response after it comes back
+    var filtered = ModifyContent(response.Content);
+    
+    // Return modified response
+    return new AgentResponse(filtered, response.ToolCalls);
+}
+```
+
+**Benefits:**
+- Allows LLM to generate responses
+- Filters or censors output before returning to user
+- Perfect for content moderation and response filtering
+- User never sees inappropriate content
+
+## SafeguardMiddleware Example: Both Patterns
+
+The SafeguardMiddleware sample demonstrates both patterns:
+
+```csharp
+// Pattern 1: Input validation with short-circuit
+.UseMiddleware(new PromptGuardMiddleware())    // Blocks bad prompts
+.UseMiddleware(new ResponseGuardMiddleware())  // Filters bad responses
+```
+
+### Execution Scenarios
+
+**Scenario 1: Bad Prompt** → Short-circuits at PromptGuard
+```
+Input: "this is bad"
+  → PromptGuardMiddleware detects "bad"
+  → Returns immediately (does NOT call next())
+  → LLM never called ✓
+  → User sees: "I'm sorry, but I cannot process..."
+```
+
+**Scenario 2: Good Prompt, Good Response** → Normal flow
+```
+Input: "hello world"
+  → PromptGuardMiddleware passes
+  → ResponseGuardMiddleware gets LLM response
+  → No filtering needed (no "bad" found)
+  → User sees: "Echo: hello world"
+```
+
+**Scenario 3: Good Prompt, Bad Response** → Filtered at ResponseGuard
+```
+Input: "test"
+  → PromptGuardMiddleware passes
+  → LLM returns: "This contains bad content."
+  → ResponseGuardMiddleware filters
+  → User sees: "This contains [censored] content." ✓
+```
+
 ## Best Practices
 
 1. **Order Matters**: Place more critical validations early
@@ -181,9 +270,15 @@ PromptGuardMiddleware.InvokeAsync()
    - Context injection before business logic
 
 2. **Short-Circuit Early**: Return responses without calling next() to avoid unnecessary processing
+   - Use for input validation and gating
+   - Saves costs by avoiding LLM calls
 
 3. **Post-Processing**: Modify responses after next() completes for filtering, logging, etc.
+   - Use for output validation
+   - Ensures LLM gets executed before filtering
 
 4. **Error Handling**: Middlewares should handle exceptions appropriately or let them propagate
 
 5. **Performance**: Avoid expensive operations in the pre-LLM phase; they affect all requests
+
+6. **Combine Patterns**: Use short-circuit for validation + filtering for sanitization
