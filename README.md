@@ -89,7 +89,7 @@ public sealed class DemoModel : IAgentModel
 
 - `Agent`: runtime orchestrator for model, middleware, memory, skills, and tools.
 - `AgentContext`: current input + history + mutable working messages.
-- `IAssistantMiddleware`: pipeline steps around model execution.
+- `IAssistantMiddleware`: pipeline steps around model execution (e.g., memory injection, content safeguards)
 - `IMemoryService`: store/retrieve memory for context injection.
 - `IEmbeddingProvider` (Vector Provider): generates embeddings for semantic memory search.
 - `IVectorStore`: pluggable vector storage (pgvector, in-memory, etc.).
@@ -98,6 +98,10 @@ public sealed class DemoModel : IAgentModel
 - `ITool`: executable function the model can request.
 
 If memory is configured, `MemoryMiddleware` is added automatically unless you add your own memory middleware.
+
+### Middleware Execution Order
+
+Middlewares execute in the order they are registered, forming a pipeline where each middleware can process requests before and after the next layer. For detailed information about how middlewares work and their execution flow, see [Middleware Execution Order](docs/middleware-execution-order.md).
 
 ## Samples
 
@@ -131,16 +135,16 @@ dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
 USE_EMBEDDINGS=true OPENAI_API_KEY=your_key dotnet run --project samples/MemoryAndMiddleware/MemoryAndMiddleware.csproj
 ```
 
-### Tool Calling (`samples/ToolCalling`)
+### Safeguard Middleware (`samples/SafeguardMiddleware`)
 
-Demonstrates OpenAI function calling capabilities. Shows:
-- Registering tools with the OpenAI provider
-- Implementing `ITool` for executable functions
-- How the model can invoke tools during conversations
-- Interactive tool usage with a weather example
+Demonstrates content moderation and guardrails through custom middleware. Shows:
+- Prompt validation before LLM processing (pre-LLM safeguards)
+- Response filtering after LLM generation (post-LLM safeguards)
+- Middleware chaining and short-circuit responses
+- Basic keyword-based content moderation
 
 ```bash
-OPENAI_API_KEY=your_key dotnet run --project samples/ToolCalling/ToolCalling.csproj
+dotnet run --project samples/SafeguardMiddleware/SafeguardMiddleware.csproj
 ```
 
 ### Personal Assistant (`samples/PersonalAssistant`)
