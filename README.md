@@ -163,6 +163,75 @@ OPENAI_API_KEY=your_key dotnet run --project samples/PersonalAssistant/PersonalA
 USE_EMBEDDINGS=true OPENAI_API_KEY=your_key dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
 ```
 
+### Middleware Examples
+
+Agentic.NET includes several focused middleware samples demonstrating different patterns and use cases:
+
+#### LoggingMiddleware (`samples/LoggingMiddleware`)
+
+Demonstrates request/response logging for debugging and audit trails. Shows:
+- Request logging with timestamp and history size
+- Response logging with duration tracking
+- Formatted console output for visibility
+
+```bash
+OPENAI_API_KEY=your_key dotnet run --project samples/LoggingMiddleware/LoggingMiddleware.csproj
+```
+
+**See:** [LoggingMiddleware README](samples/LoggingMiddleware/README.md)
+
+#### RateLimitingMiddleware (`samples/RateLimitingMiddleware`)
+
+Demonstrates rate limiting using token bucket algorithm. Shows:
+- Per-client rate limiting
+- Automatic token refill
+- Preventing abuse and controlling costs
+
+```bash
+OPENAI_API_KEY=your_key dotnet run --project samples/RateLimitingMiddleware/RateLimitingMiddleware.csproj
+```
+
+**See:** [RateLimitingMiddleware README](samples/RateLimitingMiddleware/README.md)
+
+#### AuthenticationMiddleware (`samples/AuthenticationMiddleware`)
+
+Demonstrates authentication and role-based authorization. Shows:
+- API key validation
+- User identification
+- Role-based access control (RBAC)
+
+```bash
+OPENAI_API_KEY=your_key dotnet run --project samples/AuthenticationMiddleware/AuthenticationMiddleware.csproj
+```
+
+**See:** [AuthenticationMiddleware README](samples/AuthenticationMiddleware/README.md)
+
+#### CachingMiddleware (`samples/CachingMiddleware`)
+
+Demonstrates response caching for improved performance and reduced costs. Shows:
+- Cache hits and misses
+- TTL-based cache expiration
+- Significant cost savings for repeated queries
+
+```bash
+OPENAI_API_KEY=your_key dotnet run --project samples/CachingMiddleware/CachingMiddleware.csproj
+```
+
+**See:** [CachingMiddleware README](samples/CachingMiddleware/README.md)
+
+#### ErrorHandlingMiddleware (`samples/ErrorHandlingMiddleware`)
+
+Demonstrates error recovery and resilience patterns. Shows:
+- Automatic retry with exponential backoff
+- Request timeout handling
+- Graceful error messages
+
+```bash
+OPENAI_API_KEY=your_key dotnet run --project samples/ErrorHandlingMiddleware/ErrorHandlingMiddleware.csproj
+```
+
+**See:** [ErrorHandlingMiddleware README](samples/ErrorHandlingMiddleware/README.md)
+
 ## Environment Variables
 
 Samples that use OpenAI require the following environment variables:
