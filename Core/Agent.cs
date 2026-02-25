@@ -76,6 +76,24 @@ public sealed class Agent
         _initialized = true;
     }
 
+    public async Task UpdateSoulAsync(CancellationToken cancellationToken = default)
+    {
+        if (_soulLoader is not null)
+        {
+            _soul = await _soulLoader.ReloadSoulAsync(cancellationToken);
+        }
+    }
+
+    public async Task UpdateSoulAsync(SoulDocument updatedSoul, CancellationToken cancellationToken = default)
+    {
+        _soul = updatedSoul;
+        
+        if (_soulLoader is IPersistentSoulLoader persistentLoader)
+        {
+            await persistentLoader.UpdateSoulAsync(updatedSoul, cancellationToken);
+        }
+    }
+
     public async Task<string> ReplyAsync(string input, CancellationToken cancellationToken = default)
     {
         if (!_initialized)

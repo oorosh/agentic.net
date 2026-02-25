@@ -94,7 +94,8 @@ public sealed class DemoModel : IAgentModel
 - `IEmbeddingProvider` (Vector Provider): generates embeddings for semantic memory search.
 - `IVectorStore`: pluggable vector storage (pgvector, in-memory, etc.).
 - `ISkillLoader`: loads agent skills from filesystem.
-- `ISoulLoader`: loads agent identity from SOUL.md.
+- `ISoulLoader`: loads agent identity from SOUL.md; supports dynamic personality updates with `ReloadSoulAsync()` and `UpdateSoulAsync()`.
+- `IPersistentSoulLoader`: extension for read-write SOUL implementations enabling personality learning.
 - `ITool`: executable function the model can request.
 
 If memory is configured, `MemoryMiddleware` is added automatically unless you add your own memory middleware.
@@ -162,6 +163,21 @@ OPENAI_API_KEY=your_key dotnet run --project samples/PersonalAssistant/PersonalA
 # With embeddings
 USE_EMBEDDINGS=true OPENAI_API_KEY=your_key dotnet run --project samples/PersonalAssistant/PersonalAssistant.csproj
 ```
+
+### Dynamic SOUL (`samples/DynamicSOUL`)
+
+Demonstrates dynamic personality learning where agents adapt their SOUL.md identity during conversations. Features:
+- Load agent personality from SOUL.md
+- Update personality based on conversation feedback  
+- Persist personality changes back to disk
+- Implement custom ISoulLoader for any data source (database, API, cloud storage, etc.)
+
+```bash
+# Run the main demo - file-based SOUL
+OPENAI_API_KEY=your_key dotnet run --project samples/DynamicSOUL/DynamicSOUL.csproj
+```
+
+**See:** [Dynamic SOUL README](samples/DynamicSOUL/README.md) and [Custom Loaders Guide](samples/DynamicSOUL/README_CUSTOM.md)
 
 ### Middleware Examples
 

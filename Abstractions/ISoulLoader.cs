@@ -15,4 +15,10 @@ public sealed record SoulDocument
 public interface ISoulLoader
 {
     Task<SoulDocument?> LoadSoulAsync(CancellationToken cancellationToken = default);
+    Task<SoulDocument?> ReloadSoulAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IPersistentSoulLoader : ISoulLoader
+{
+    Task UpdateSoulAsync(SoulDocument soul, CancellationToken cancellationToken = default);
 }

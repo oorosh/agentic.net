@@ -3,7 +3,7 @@ using Agentic.Abstractions;
 
 namespace Agentic.Loaders;
 
-public sealed class FileSystemSoulLoader : ISoulLoader
+public sealed class FileSystemSoulLoader : IPersistentSoulLoader
 {
     private readonly string _soulFilePath;
     private SoulDocument? _cached;
@@ -94,6 +94,56 @@ public sealed class FileSystemSoulLoader : ISoulLoader
             return string.Join("\n", content);
         }
         return null;
+    }
+
+    public async Task<SoulDocument?> ReloadSoulAsync(CancellationToken cancellationToken = default)
+    {
+        _cached = null;
+        return await LoadSoulAsync(cancellationToken);
+    }
+
+    public async Task UpdateSoulAsync(SoulDocument soul, CancellationToken cancellationToken = default)
+    {
+        var markdown = ToMarkdown(soul);
+        await File.WriteAllTextAsync(_soulFilePath, markdown, cancellationToken);
+        _cached = soul;
+    }
+
+    private static string ToMarkdown(SoulDocument soul)
+    {
+        var parts = new List<string> { $"# {soul.Name}" };
+
+        if (!string.IsNullOrWhiteSpace(soul.Role))
+        {
+            parts.Add($"## Role\n{soul.Role}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(soul.Personality))
+        {
+            parts.Add($"## Personality\n{soul.Personality}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(soul.Rules))
+        {
+            parts.Add($"## Rules\n{soul.Rules}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(soul.Tools))
+        {
+            parts.Add($"## Tools\n{soul.Tools}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(soul.OutputFormat))
+        {
+            parts.Add($"## Output Format\n{soul.OutputFormat}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(soul.Handoffs))
+        {
+            parts.Add($"## Handoffs\n{soul.Handoffs}");
+        }
+
+        return string.Join("\n\n", parts);
     }
 
     public static string ToSystemPrompt(SoulDocument soul)
