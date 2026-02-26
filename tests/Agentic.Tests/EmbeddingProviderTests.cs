@@ -50,11 +50,11 @@ public sealed class EmbeddingProviderTests
         // Perfect match
         await store.UpsertAsync("exact", [1f, 0f, 0f]);
         
-        // 90 degrees apart (perpendicular)
-        await store.UpsertAsync("perpendicular", [0f, 1f, 0f]);
-        
-        // 45 degrees apart
+        // 45 degrees apart (higher similarity than perpendicular)
         await store.UpsertAsync("partial", [0.707f, 0.707f, 0f]);
+        
+        // 90 degrees apart (perpendicular, zero similarity)
+        await store.UpsertAsync("perpendicular", [0f, 1f, 0f]);
 
         var results = await store.SearchAsync([1f, 0f, 0f], topK: 3);
 
@@ -62,11 +62,15 @@ public sealed class EmbeddingProviderTests
         Assert.Equal("exact", results[0].Id);
         Assert.Equal(1f, results[0].Score, precision: 2);
         
-        Assert.Equal("perpendicular", results[1].Id);
-        Assert.Equal(0f, results[1].Score, precision: 1);
+        // Results should be sorted by similarity: exact (1.0) > partial (0.707) > perpendicular (0)
+        Assert.Equal("partial", results[1].Id);
+        Assert.True(results[1].Score > 0, "Partial similarity should be positive");
         
-        Assert.True(results[0].Score > results[2].Score);
-        Assert.True(results[2].Score > results[1].Score);
+        Assert.Equal("perpendicular", results[2].Id);
+        Assert.Equal(0f, results[2].Score, precision: 1);
+        
+        Assert.True(results[0].Score > results[1].Score);
+        Assert.True(results[1].Score > results[2].Score);
     }
 
     [Fact]

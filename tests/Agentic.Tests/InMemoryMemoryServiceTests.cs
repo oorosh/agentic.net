@@ -253,6 +253,7 @@ public sealed class InMemoryMemoryServiceTests
         var results = await service.RetrieveRelevantAsync("hello", topK: 10);
         
         Assert.Single(results);
-        Assert.Contains("Hello", results);
+        // Verify the result contains the text "Hello"
+        Assert.Contains("Hello", results[0]);
     }
 }

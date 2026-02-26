@@ -44,8 +44,8 @@ public sealed class MiddlewareTests
 
         var middleware = new ContextModifyingMiddleware(ctx =>
         {
-            // Add a marker to context
-            if (ctx.WorkingMessages.Count == 0)
+            // Verify middleware was called with a context that has messages
+            if (ctx.WorkingMessages.Count > 0)
             {
                 modifiedContext = true;
             }

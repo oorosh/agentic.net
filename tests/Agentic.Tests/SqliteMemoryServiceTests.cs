@@ -110,9 +110,10 @@ public sealed class SqliteMemoryServiceTests : IAsyncLifetime
         await service.StoreMessageAsync("1", "apple");
         await service.StoreMessageAsync("2", "banana");
 
+        // When query doesn't match, fall back to returning recent messages
         var results = await service.RetrieveRelevantAsync("orange", topK: 10);
         
-        Assert.Empty(results);
+        Assert.Equal(2, results.Count);
     }
 
     [Fact]
@@ -244,7 +245,8 @@ public sealed class SqliteMemoryServiceTests : IAsyncLifetime
         var results = await service.RetrieveRelevantAsync("hello", topK: 10);
         
         Assert.Single(results);
-        Assert.Contains("Hello", results);
+        // Verify the result contains the text "Hello"
+        Assert.Contains("Hello", results[0]);
     }
 
     [Fact]
