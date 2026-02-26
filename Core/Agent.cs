@@ -135,12 +135,13 @@ public sealed class Agent
                 break;
             }
 
-            foreach (var toolCall in response.ToolCalls!)
-            {
-                if (!_tools.TryGetValue(toolCall.Name, out var tool))
-                {
-                    throw new InvalidOperationException($"Tool '{toolCall.Name}' is not registered.");
-                }
+             foreach (var toolCall in response.ToolCalls!)
+             {
+                 if (!_tools.TryGetValue(toolCall.Name, out var tool))
+                 {
+                     context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: Error - Tool '{toolCall.Name}' is not registered."));
+                     continue;
+                 }
 
                 // Bind structured parameters if the tool has them
                 var parameters = ToolParameterMetadata.ExtractFromTool(tool);
@@ -157,8 +158,15 @@ public sealed class Agent
                     }
                 }
 
-                var toolResult = await tool.InvokeAsync(toolCall.Arguments, cancellationToken);
-                context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: {toolResult}"));
+                try
+                {
+                    var toolResult = await tool.InvokeAsync(toolCall.Arguments, cancellationToken);
+                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: {toolResult}"));
+                }
+                catch (Exception ex)
+                {
+                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: Error - {ex.Message}"));
+                }
             }
 
             context.WorkingMessages.Add(new ChatMessage(

@@ -99,7 +99,7 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
             if (i > 0) sql += " OR";
             sql += " content LIKE $token" + i;
         }
-        sql += " LIMIT $limit";
+        sql += " ORDER BY rowid DESC LIMIT $limit";
 
         var cmd = _connection!.CreateCommand();
         cmd.CommandText = sql;

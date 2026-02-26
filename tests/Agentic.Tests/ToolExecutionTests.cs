@@ -75,36 +75,36 @@ public sealed class ToolExecutionTests
         Assert.NotNull(response);
     }
 
-    [Fact]
-    public async Task Tool_result_included_in_next_turn()
-    {
-        IReadOnlyList<ChatMessage>? capturedMessages = null;
+     [Fact]
+     public async Task Tool_result_included_in_next_turn()
+     {
+         IReadOnlyList<ChatMessage>? capturedMessages = null;
 
-        var tool = new TestTool("test", "Test tool", args =>
-            Task.FromResult("TOOL_RESULT"));
+         var tool = new TestTool("test", "Test tool", args =>
+             Task.FromResult("TOOL_RESULT"));
 
-        var provider = new TestModelProvider(
-            new CapturingModel(msgs => { capturedMessages = msgs; return Task.FromResult(new AgentResponse("ok")); })
-        );
+         var provider = new TestModelProvider(
+             new CapturingModel(msgs => { capturedMessages = msgs; return Task.FromResult(new AgentResponse("ok")); })
+         );
 
-        var agent = new AgentBuilder()
-            .WithModelProvider(provider)
-            .WithTool(tool)
-            .Build();
+         var agent = new AgentBuilder()
+             .WithModelProvider(provider)
+             .WithTool(tool)
+             .Build();
 
-        // First, trigger a tool call
-        var provider2 = new TestToolModelProvider(
-            new ToolCallingModel(),
-            tool);
-        var agent2 = new AgentBuilder()
-            .WithModelProvider(provider2)
-            .WithTool(tool)
-            .Build();
+         // First, trigger a tool call with the correct tool name
+         var provider2 = new TestToolModelProvider(
+             new ToolCallingModelWithArgs("test", "arg"),
+             tool);
+         var agent2 = new AgentBuilder()
+             .WithModelProvider(provider2)
+             .WithTool(tool)
+             .Build();
 
-        var response = await agent2.ReplyAsync("test");
+         var response = await agent2.ReplyAsync("test");
 
-        // Tool result should be included
-        Assert.Contains(agent2.History, m => m.Role == ChatRole.Tool && m.Content.Contains("TOOL_RESULT"));
+         // Tool result should be included in the response
+         Assert.Contains("TOOL_RESULT", response);
     }
 
     [Fact]

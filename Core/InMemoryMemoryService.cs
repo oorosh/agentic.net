@@ -32,9 +32,23 @@ public sealed class InMemoryMemoryService : IMemoryService
             throw new InvalidOperationException("Memory service is not initialized.");
         }
 
+        // If query is empty, return all messages in reverse order (most recent first)
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            var allMessages = _store
+                .AsEnumerable()
+                .Reverse()
+                .Take(topK)
+                .Select(x => x.Content)
+                .ToList();
+            return Task.FromResult<IReadOnlyList<string>>(allMessages);
+        }
+
         var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         var matches = _store
+            .AsEnumerable()
+            .Reverse()
             .Select(item => new
             {
                 item.Content,
@@ -67,12 +81,16 @@ public sealed class InMemoryMemoryService : IMemoryService
             throw new InvalidOperationException("Memory service is not initialized.");
         }
 
+        // Check if query is a zero vector
+        bool isZeroVector = queryEmbedding.All(x => x == 0f);
+
         var similarities = _store
             .Where(item => _embeddings.ContainsKey(item.Id))
             .Select(item => (
                 item.Content,
                 Score: CosineSimilarity(queryEmbedding, _embeddings[item.Id])
             ))
+            .Where(x => isZeroVector || x.Score >= 0.5f)
             .OrderByDescending(x => x.Score)
             .Take(topK)
             .ToList();
@@ -95,6 +113,20 @@ public sealed class InMemoryMemoryService : IMemoryService
             normB += b[i] * b[i];
         }
 
-        return dot / (MathF.Sqrt(normA) * MathF.Sqrt(normB));
+        // Handle zero vectors
+        if (normA == 0 || normB == 0)
+        {
+            return 0f;
+        }
+
+        float similarity = dot / (MathF.Sqrt(normA) * MathF.Sqrt(normB));
+        
+        // Handle NaN (shouldn't happen with above check, but just in case)
+        if (float.IsNaN(similarity))
+        {
+            return 0f;
+        }
+
+        return similarity;
     }
 }
