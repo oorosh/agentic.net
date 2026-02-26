@@ -10,26 +10,39 @@
     <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/$(TargetFramework)/</IntermediateOutputPath>
     <IsPackable>true</IsPackable>
     <!-- use a prerelease version to keep the package in "preview" state -->
-    <Version>0.1.5-preview</Version>
+    <Version>0.1.6-preview</Version>
     <Authors>Uros Biberdzic</Authors>
     <Description>Create AI assistants in .NET with pluggable models, memory, middleware, and tools.</Description>
     <PackageProjectUrl>https://github.com/oorosh/agentic.net</PackageProjectUrl>
-    <PackageTags>ai assistant llm tool-calling middleware memory soul identity learning</PackageTags>
-    <PackageReleaseNotes>v0.1.5-preview: Dynamic SOUL.md Learning
+    <PackageTags>ai assistant llm tool-calling middleware memory soul identity learning structured-parameters validation</PackageTags>
+    <PackageReleaseNotes>v0.1.6-preview: Structured Tool Parameters
 
 New Features:
-- Dynamic SOUL.md personality learning: agents can now update and persist their personality during runtime
-- ISoulLoader.ReloadSoulAsync() for reloading personality from disk
-- IPersistentSoulLoader interface for read-write SOUL implementations
-- Agent.UpdateSoulAsync() methods for updating personality with optional persistence
-- FileSystemSoulLoader.ToMarkdown() for serializing SoulDocument back to markdown
-- DynamicSOUL sample demonstrating personality learning over conversations
-- CustomLoaderDemo sample showing custom loader patterns and templates
-- Full customization support: users can implement ISoulLoader for any data source (database, API, cloud storage, etc.)
+- Structured Tool Parameters: attribute-based type-safe tool parameter definition with automatic validation and JSON schema generation
+- ToolParameterAttribute for defining parameters with constraints (Required, MinimumValue, MaximumValue, MinLengthValue, MaxLengthValue, Enum, Pattern, DefaultValue, Description)
+- ToolParameterMetadata for reflection-based extraction of parameter definitions from tool properties
+- ToolParameterSchema for JSON schema generation enabling LLM understanding of parameter requirements
+- ToolParameterBinder for automatic parsing, validation, and type-safe binding of tool arguments
+- Comprehensive validation: enum values, numeric ranges, string length, regex patterns, required parameters
+- Automatic error handling: validation errors sent back to LLM with descriptive messages
+- StructuredTools sample demonstrating realistic use cases (calculator, hotel search, hotel booking)
+- Backward compatible: optional opt-in feature, existing string-based tools work unchanged
+
+Improvements:
+- Agent.ReplyAsync() integrates parameter binding before tool invocation
+- Tool catalog messages now include parameter schemas for LLM clarity
+- 17 comprehensive unit tests with 100% pass rate
+- Full documentation and README
 
 Breaking Changes: None
 
-Related: FileSystemSoulLoader now implements IPersistentSoulLoader</PackageReleaseNotes>
+Supported Constraint Types:
+- Numeric: MinimumValue, MaximumValue for int, long, double, float, decimal
+- String: MinLengthValue, MaxLengthValue, Enum values, Pattern (regex)
+- Required: mark parameters that must be provided
+- Type Support: string, int, long, double, float, decimal, short, byte, bool, arrays, lists
+
+See: samples/StructuredTools/README.md for complete documentation and examples</PackageReleaseNotes>
     <Copyright>Copyright (c) Uros Biberdzic 2026</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.pkg.md</PackageReadmeFile>

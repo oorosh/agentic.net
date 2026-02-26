@@ -142,6 +142,21 @@ public sealed class Agent
                     throw new InvalidOperationException($"Tool '{toolCall.Name}' is not registered.");
                 }
 
+                // Bind structured parameters if the tool has them
+                var parameters = ToolParameterMetadata.ExtractFromTool(tool);
+                if (parameters.Count > 0)
+                {
+                    try
+                    {
+                        ToolParameterBinder.BindParameters(tool, toolCall.Arguments, parameters);
+                    }
+                    catch (Exception ex)
+                    {
+                        context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: Error - {ex.Message}"));
+                        continue;
+                    }
+                }
+
                 var toolResult = await tool.InvokeAsync(toolCall.Arguments, cancellationToken);
                 context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: {toolResult}"));
             }
@@ -188,6 +203,14 @@ public sealed class Agent
         foreach (var tool in tools.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
         {
             lines.Add($"- {tool.Name}: {tool.Description}");
+            
+            // Include parameter schema if the tool has structured parameters
+            var parameters = ToolParameterMetadata.ExtractFromTool(tool);
+            if (parameters.Count > 0)
+            {
+                var schema = ToolParameterSchema.FromTool(tool, parameters);
+                lines.Add($"  Parameters: {schema.ToJson()}");
+            }
         }
 
         lines.Add("If a tool is needed, return tool calls using the exact tool name and arguments.");

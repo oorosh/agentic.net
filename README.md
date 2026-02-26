@@ -97,6 +97,7 @@ public sealed class DemoModel : IAgentModel
 - `ISoulLoader`: loads agent identity from SOUL.md; supports dynamic personality updates with `ReloadSoulAsync()` and `UpdateSoulAsync()`.
 - `IPersistentSoulLoader`: extension for read-write SOUL implementations enabling personality learning.
 - `ITool`: executable function the model can request.
+- `ToolParameterAttribute`: attribute-based parameter definition enabling type-safe tool arguments with automatic validation and JSON schema generation.
 
 If memory is configured, `MemoryMiddleware` is added automatically unless you add your own memory middleware.
 
@@ -178,6 +179,23 @@ OPENAI_API_KEY=your_key dotnet run --project samples/DynamicSOUL/DynamicSOUL.csp
 ```
 
 **See:** [Dynamic SOUL README](samples/DynamicSOUL/README.md) and [Custom Loaders Guide](samples/DynamicSOUL/README_CUSTOM.md)
+
+### Structured Tools (`samples/StructuredTools`)
+
+Demonstrates the type-safe structured tool parameters feature with automatic JSON schema generation and validation. Shows:
+- Defining tool parameters with `ToolParameterAttribute` for type-safe constraints
+- Automatic parsing and validation of tool arguments
+- Numeric constraints (min/max values, ranges)
+- String validation (length, pattern, enum values)
+- JSON schema generation for LLM understanding
+- Type-safe parameter binding eliminating manual JSON parsing
+- Tool examples: calculator, hotel search, hotel booking
+
+```bash
+OPENAI_API_KEY=your_key dotnet run --project samples/StructuredTools/StructuredTools.csproj
+```
+
+**See:** [Structured Tools README](samples/StructuredTools/README.md)
 
 ### Middleware Examples
 
