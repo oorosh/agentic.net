@@ -4,9 +4,6 @@ Create AI assistants in .NET with pluggable models, memory, middleware, and
 tool calling. Agentic.NET gives you a small runtime to compose assistant
 workflows without coupling your app to a single provider.
 
-**New in v0.1.5:** Dynamic SOUL.md learning - agents can now update their personality
-during conversations and persist changes back to disk or any custom storage.
-
 This README is kept short for NuGet users; full documentation and samples are
 available in the GitHub repository.
 
@@ -38,42 +35,14 @@ Console.WriteLine(reply);
 // optional: add memory, middleware and tools the same way
 ```
 
-## Dynamic Personality Learning (v0.1.5+)
+## Key Features
 
-Agents can now learn and adapt their personality:
-
-```csharp
-// Load initial SOUL.md
-var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .WithSoul(new FileSystemSoulLoader("./SOUL.md"))
-    .Build();
-
-// Update personality based on feedback
-var updatedSoul = agent.Soul with 
-{ 
-    Personality = "More friendly and approachable" 
-};
-await agent.UpdateSoulAsync(updatedSoul);  // Saves to SOUL.md
-```
-
-## Custom SOUL Loaders
-
-Implement `ISoulLoader` or `IPersistentSoulLoader` to load personality from any source:
-- Database (PostgreSQL, SQLite, SQL Server, MongoDB)
-- API endpoints (REST, GraphQL)
-- Cloud storage (S3, Azure Blob, Firestore)
-- Configuration servers
-- Your own custom implementation
-
-```csharp
-public sealed class DatabaseSoulLoader : IPersistentSoulLoader { ... }
-
-var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .WithSoul(new DatabaseSoulLoader(connectionString))
-    .Build();
-```
+- **Pluggable Models**: Built-in OpenAI support or implement `IModelProvider` for other LLMs
+- **Memory**: SQLite, in-memory, or implement `IMemoryService` for custom storage
+- **Middleware**: Pre/post-process conversation with `IAssistantMiddleware`
+- **Tools**: Register executable functions the model can invoke
+- **Skills**: Load capabilities from Agent Skills format
+- **Identity**: Define agent personality with SOUL.md format
 
 Note: this package is a **preview** release; expect
 breaking changes until a stable version is published.
