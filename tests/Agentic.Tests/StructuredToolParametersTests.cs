@@ -72,6 +72,7 @@ public sealed class StructuredToolParametersTests
         Assert.NotNull(schema.Parameters);
         Assert.Equal("object", schema.Parameters.Type);
         Assert.Equal(2, schema.Parameters.Properties.Count);
+        Assert.NotNull(schema.Parameters.Required);
         Assert.Single(schema.Parameters.Required);
     }
 
