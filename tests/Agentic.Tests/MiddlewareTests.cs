@@ -7,6 +7,7 @@ using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
 using Agentic.Middleware;
+using Agentic.Tests.Fakes;
 using Xunit;
 
 namespace Agentic.Tests;
@@ -26,7 +27,7 @@ public sealed class MiddlewareTests
         var mw3 = new OrderRecordingMiddleware("mw3", calls);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new EchoModel()))
+            .WithModelProvider(new FakeModelProvider(new EchoModel()))
             .UseMiddleware(mw1)
             .UseMiddleware(mw2)
             .UseMiddleware(mw3)
@@ -52,7 +53,7 @@ public sealed class MiddlewareTests
         });
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new EchoModel()))
+            .WithModelProvider(new FakeModelProvider(new EchoModel()))
             .UseMiddleware(middleware)
             .Build();
 
@@ -70,7 +71,7 @@ public sealed class MiddlewareTests
         var mw2 = new TrackingMiddleware("second", executed);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new EchoModel()))
+            .WithModelProvider(new FakeModelProvider(new EchoModel()))
             .UseMiddleware(mw1)
             .UseMiddleware(mw2)
             .Build();
@@ -89,7 +90,7 @@ public sealed class MiddlewareTests
         var middleware = new InputCapturingMiddleware(captured);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new EchoModel()))
+            .WithModelProvider(new FakeModelProvider(new EchoModel()))
             .UseMiddleware(middleware)
             .Build();
 
@@ -110,7 +111,7 @@ public sealed class MiddlewareTests
         memory.StoredMessages.Add("remembered");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new EchoModel()))
+            .WithModelProvider(new FakeModelProvider(new EchoModel()))
             .WithMemory(memory)
             .UseMiddleware(middleware)
             .Build();
@@ -131,7 +132,7 @@ public sealed class MiddlewareTests
         var middleware = new ExceptionThrowingMiddleware();
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new EchoModel()))
+            .WithModelProvider(new FakeModelProvider(new EchoModel()))
             .UseMiddleware(middleware)
             .Build();
 
@@ -144,7 +145,7 @@ public sealed class MiddlewareTests
         var middleware = new ResponseShortCircuitMiddleware();
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new NeverCalledModel()))
+            .WithModelProvider(new FakeModelProvider(new NeverCalledModel()))
             .UseMiddleware(middleware)
             .Build();
 
@@ -162,7 +163,7 @@ public sealed class MiddlewareTests
         var mw2 = new OrderTrackingMiddleware("inner_enter", "inner_exit", order);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new EchoModel()))
+            .WithModelProvider(new FakeModelProvider(new EchoModel()))
             .UseMiddleware(mw1)
             .UseMiddleware(mw2)
             .Build();
@@ -184,7 +185,7 @@ public sealed class MiddlewareTests
         var middleware = new HistoryTrackingMiddleware(capturedHistoryCounts);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new EchoModel()))
+            .WithModelProvider(new FakeModelProvider(new EchoModel()))
             .UseMiddleware(middleware)
             .Build();
 
@@ -351,15 +352,6 @@ public sealed class MiddlewareTests
         {
             throw new InvalidOperationException("Model should not be called");
         }
-    }
-
-    private sealed class TestModelProvider : IModelProvider
-    {
-        private readonly IAgentModel _model;
-
-        public TestModelProvider(IAgentModel model) => _model = model;
-
-        public IAgentModel CreateModel() => _model;
     }
 
     private sealed class TrackingMemoryService : IMemoryService

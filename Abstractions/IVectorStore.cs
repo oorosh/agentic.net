@@ -1,6 +1,4 @@
-using Agentic.Abstractions;
-
-namespace Agentic.Stores;
+namespace Agentic.Abstractions;
 
 public interface IVectorStore
 {

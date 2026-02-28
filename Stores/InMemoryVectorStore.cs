@@ -1,4 +1,5 @@
 using Agentic.Abstractions;
+using Agentic.Core;
 
 namespace Agentic.Stores;
 
@@ -41,7 +42,7 @@ public sealed class InMemoryVectorStore : IVectorStore
             throw new ArgumentException($"Query vector dimension must be {_dimensions}, got {queryVector.Length}.");
 
         var results = _vectors
-            .Select(kvp => (kvp.Key, kvp.Value, Score: CosineSimilarity(queryVector, kvp.Value)))
+            .Select(kvp => (kvp.Key, kvp.Value, Score: VectorMath.CosineSimilarity(queryVector, kvp.Value)))
             .OrderByDescending(x => x.Score)
             .Take(topK)
             .ToList();
@@ -61,21 +62,5 @@ public sealed class InMemoryVectorStore : IVectorStore
         if (!_initialized) throw new InvalidOperationException("Vector store not initialized.");
         _vectors.Clear();
         return Task.CompletedTask;
-    }
-
-    private static float CosineSimilarity(float[] a, float[] b)
-    {
-        if (a.Length != b.Length)
-            throw new ArgumentException("Vector dimensions must match.");
-
-        float dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-
-        return dot / (MathF.Sqrt(normA) * MathF.Sqrt(normB));
     }
 }

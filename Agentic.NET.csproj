@@ -10,39 +10,34 @@
     <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/$(TargetFramework)/</IntermediateOutputPath>
     <IsPackable>true</IsPackable>
     <!-- use a prerelease version to keep the package in "preview" state -->
-    <Version>0.1.6-preview</Version>
+    <Version>0.1.7-preview</Version>
     <Authors>Uros Biberdzic</Authors>
     <Description>Create AI assistants in .NET with pluggable models, memory, middleware, and tools.</Description>
     <PackageProjectUrl>https://github.com/oorosh/agentic.net</PackageProjectUrl>
     <PackageTags>ai assistant llm tool-calling middleware memory soul identity learning structured-parameters validation</PackageTags>
-    <PackageReleaseNotes>v0.1.6-preview: Structured Tool Parameters
-
-New Features:
-- Structured Tool Parameters: attribute-based type-safe tool parameter definition with automatic validation and JSON schema generation
-- ToolParameterAttribute for defining parameters with constraints (Required, MinimumValue, MaximumValue, MinLengthValue, MaxLengthValue, Enum, Pattern, DefaultValue, Description)
-- ToolParameterMetadata for reflection-based extraction of parameter definitions from tool properties
-- ToolParameterSchema for JSON schema generation enabling LLM understanding of parameter requirements
-- ToolParameterBinder for automatic parsing, validation, and type-safe binding of tool arguments
-- Comprehensive validation: enum values, numeric ranges, string length, regex patterns, required parameters
-- Automatic error handling: validation errors sent back to LLM with descriptive messages
-- StructuredTools sample demonstrating realistic use cases (calculator, hotel search, hotel booking)
-- Backward compatible: optional opt-in feature, existing string-based tools work unchanged
+    <PackageReleaseNotes>v0.1.7-preview: Internal Refactoring &amp; Performance
 
 Improvements:
-- Agent.ReplyAsync() integrates parameter binding before tool invocation
-- Tool catalog messages now include parameter schemas for LLM clarity
-- 17 comprehensive unit tests with 100% pass rate
-- Full documentation and README
+- Static HttpClient shared across requests in OpenAI providers (avoids socket exhaustion)
+- JsonSerializerOptions cached as static readonly in OpenAiChatModel (avoids repeated allocation)
+- PropertyInfo lookups cached per (toolType, paramName) via ConcurrentDictionary in ToolParameterBinder
+- Regex patterns pre-compiled and cached via ConcurrentDictionary (avoids recompiling on every call)
+- Memory IDs now derived from SHA256(content + ticks) instead of Guid.NewGuid()
+- Removed redundant .AsEnumerable() calls in InMemoryMemoryService
+- Duplicate CosineSimilarity implementations consolidated into Core/VectorMath.cs
+- Role string mapping in ToOpenAiMessage uses a switch expression instead of ToString().ToLowerInvariant()
+- Agent.ReplyAsync() refactored into BuildPipeline(), RunToolLoopAsync(), PersistToMemoryAsync()
+- Tool catalog message lazily cached in Agent (_toolCatalogMessage ??= ...)
+- ToolParameterMetadata cached per tool type in Agent (ParameterMetadataCache)
+- EnsureInitialized() guard method extracted in InMemoryMemoryService and SqliteMemoryService
+- IVectorStore moved to Agentic.Abstractions namespace
+- Agent now implements IAsyncDisposable, disposing memory service and embedding provider on cleanup
+- FakeModelProvider extracted for test reuse; inner TestModelProvider classes removed from test files
+- OpenAiProviderOptions extracted to its own file
 
-Breaking Changes: None
-
-Supported Constraint Types:
-- Numeric: MinimumValue, MaximumValue for int, long, double, float, decimal
-- String: MinLengthValue, MaxLengthValue, Enum values, Pattern (regex)
-- Required: mark parameters that must be provided
-- Type Support: string, int, long, double, float, decimal, short, byte, bool, arrays, lists
-
-See: samples/StructuredTools/README.md for complete documentation and examples</PackageReleaseNotes>
+Breaking Changes:
+- AgentBuilder.WithOpenAi(string, string, IReadOnlyList&lt;OpenAiFunctionToolDefinition&gt;?) overload removed; use the Action&lt;OpenAiProviderOptions&gt; overload to pass tools
+- IVectorStore namespace changed from Agentic.Stores to Agentic.Abstractions</PackageReleaseNotes>
     <Copyright>Copyright (c) Uros Biberdzic 2026</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.pkg.md</PackageReadmeFile>

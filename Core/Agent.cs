@@ -1,10 +1,13 @@
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using Agentic.Abstractions;
 using Agentic.Loaders;
 using Agentic.Middleware;
 
 namespace Agentic.Core;
 
-public sealed class Agent
+public sealed class Agent : IAsyncDisposable
 {
     private const int MaxToolCallDepth = 12;
     private readonly IAgentModel _model;
@@ -16,6 +19,10 @@ public sealed class Agent
     private readonly ISkillLoader? _skillLoader;
     private readonly ISoulLoader? _soulLoader;
     private readonly List<ChatMessage> _history = [];
+    // Fix 3: cache ToolParameterMetadata per tool type to avoid repeated reflection
+    private static readonly ConcurrentDictionary<Type, IReadOnlyList<IToolParameterMetadata>> ParameterMetadataCache = new();
+    // Fix 14: cache the tool catalog string (built once since tools don't change after construction)
+    private string? _toolCatalogMessage;
     private List<Skill>? _skills;
     private SoulDocument? _soul;
     private bool _initialized;
@@ -105,9 +112,26 @@ public sealed class Agent
 
         if (_tools.Count > 0)
         {
-            context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, BuildToolCatalogMessage(_tools.Values)));
+            _toolCatalogMessage ??= BuildToolCatalogMessage(_tools.Values);
+            context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, _toolCatalogMessage));
         }
 
+        var handler = BuildPipeline();
+        var response = await RunToolLoopAsync(context, handler, cancellationToken);
+
+        var userMessage = new ChatMessage(ChatRole.User, input);
+        var assistantMessage = new ChatMessage(ChatRole.Assistant, response.Content);
+
+        _history.Add(userMessage);
+        _history.Add(assistantMessage);
+
+        await PersistToMemoryAsync(input, response.Content, cancellationToken);
+
+        return response.Content;
+    }
+
+    private AgentHandler BuildPipeline()
+    {
         AgentHandler handler = async (ctx, ct) => await _model.CompleteAsync(ctx.WorkingMessages.ToList(), ct);
 
         foreach (var middleware in _middlewares.Reverse())
@@ -116,6 +140,14 @@ public sealed class Agent
             handler = (ctx, ct) => middleware.InvokeAsync(ctx, next, ct);
         }
 
+        return handler;
+    }
+
+    private async Task<AgentResponse> RunToolLoopAsync(
+        AgentContext context,
+        AgentHandler handler,
+        CancellationToken cancellationToken)
+    {
         var response = await handler(context, cancellationToken);
         var toolCallDepth = 0;
         var seenToolCallSignatures = new HashSet<string>(StringComparer.Ordinal);
@@ -124,27 +156,25 @@ public sealed class Agent
         {
             if (toolCallDepth++ >= MaxToolCallDepth)
             {
-                response = new AgentResponse(BuildToolLoopFallbackResponse(context));
-                break;
+                return new AgentResponse(BuildToolLoopFallbackResponse(context));
             }
 
             var signature = BuildToolCallSignature(response.ToolCalls!);
             if (!seenToolCallSignatures.Add(signature))
             {
-                response = new AgentResponse(BuildToolLoopFallbackResponse(context));
-                break;
+                return new AgentResponse(BuildToolLoopFallbackResponse(context));
             }
 
-             foreach (var toolCall in response.ToolCalls!)
-             {
-                 if (!_tools.TryGetValue(toolCall.Name, out var tool))
-                 {
-                     context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: Error - Tool '{toolCall.Name}' is not registered."));
-                     continue;
-                 }
+            foreach (var toolCall in response.ToolCalls!)
+            {
+                if (!_tools.TryGetValue(toolCall.Name, out var tool))
+                {
+                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"Error - Tool '{toolCall.Name}' is not registered.", toolCall.Name));
+                    continue;
+                }
 
                 // Bind structured parameters if the tool has them
-                var parameters = ToolParameterMetadata.ExtractFromTool(tool);
+                var parameters = ParameterMetadataCache.GetOrAdd(tool.GetType(), t => ToolParameterMetadata.ExtractFromTool(tool));
                 if (parameters.Count > 0)
                 {
                     try
@@ -153,7 +183,7 @@ public sealed class Agent
                     }
                     catch (Exception ex)
                     {
-                        context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: Error - {ex.Message}"));
+                        context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"Error - {ex.Message}", toolCall.Name));
                         continue;
                     }
                 }
@@ -161,11 +191,11 @@ public sealed class Agent
                 try
                 {
                     var toolResult = await tool.InvokeAsync(toolCall.Arguments, cancellationToken);
-                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: {toolResult}"));
+                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, toolResult, toolCall.Name));
                 }
                 catch (Exception ex)
                 {
-                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"{toolCall.Name}: Error - {ex.Message}"));
+                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"Error - {ex.Message}", toolCall.Name));
                 }
             }
 
@@ -176,29 +206,28 @@ public sealed class Agent
             response = await handler(context, cancellationToken);
         }
 
-        var userMessage = new ChatMessage(ChatRole.User, input);
-        var assistantMessage = new ChatMessage(ChatRole.Assistant, response.Content);
+        return response;
+    }
 
-        _history.Add(userMessage);
-        _history.Add(assistantMessage);
-
-        if (_memoryService is not null)
+    private async Task PersistToMemoryAsync(string input, string responseContent, CancellationToken cancellationToken)
+    {
+        if (_memoryService is null)
         {
-            var userId = Guid.NewGuid().ToString("N");
-            await _memoryService.StoreMessageAsync(userId, input, cancellationToken);
-            var responseId = Guid.NewGuid().ToString("N");
-            await _memoryService.StoreMessageAsync(responseId, response.Content, cancellationToken);
-
-            if (_embeddingProvider is not null)
-            {
-                var userEmbedding = await _embeddingProvider.GenerateEmbeddingAsync(input, cancellationToken);
-                await _memoryService.StoreEmbeddingAsync(userId, userEmbedding, cancellationToken);
-                var responseEmbedding = await _embeddingProvider.GenerateEmbeddingAsync(response.Content, cancellationToken);
-                await _memoryService.StoreEmbeddingAsync(responseId, responseEmbedding, cancellationToken);
-            }
+            return;
         }
 
-        return response.Content;
+        var userId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input + DateTimeOffset.UtcNow.Ticks)));
+        await _memoryService.StoreMessageAsync(userId, input, cancellationToken);
+        var responseId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(responseContent + DateTimeOffset.UtcNow.Ticks)));
+        await _memoryService.StoreMessageAsync(responseId, responseContent, cancellationToken);
+
+        if (_embeddingProvider is not null)
+        {
+            var userEmbedding = await _embeddingProvider.GenerateEmbeddingAsync(input, cancellationToken);
+            await _memoryService.StoreEmbeddingAsync(userId, userEmbedding, cancellationToken);
+            var responseEmbedding = await _embeddingProvider.GenerateEmbeddingAsync(responseContent, cancellationToken);
+            await _memoryService.StoreEmbeddingAsync(responseId, responseEmbedding, cancellationToken);
+        }
     }
 
     private static string BuildToolCatalogMessage(IEnumerable<ITool> tools)
@@ -213,7 +242,7 @@ public sealed class Agent
             lines.Add($"- {tool.Name}: {tool.Description}");
             
             // Include parameter schema if the tool has structured parameters
-            var parameters = ToolParameterMetadata.ExtractFromTool(tool);
+            var parameters = ParameterMetadataCache.GetOrAdd(tool.GetType(), t => ToolParameterMetadata.ExtractFromTool(tool));
             if (parameters.Count > 0)
             {
                 var schema = ToolParameterSchema.FromTool(tool, parameters);
@@ -232,22 +261,25 @@ public sealed class Agent
 
     private static string BuildToolLoopFallbackResponse(AgentContext context)
     {
-        var lastToolMessage = context.WorkingMessages.LastOrDefault(m => m.Role == ChatRole.Tool)?.Content;
-        if (string.IsNullOrWhiteSpace(lastToolMessage))
+        var lastToolMessage = context.WorkingMessages.LastOrDefault(m => m.Role == ChatRole.Tool);
+        if (lastToolMessage is null || string.IsNullOrWhiteSpace(lastToolMessage.Content))
         {
             return "I couldn't complete this request because tool calling kept repeating. Please try rephrasing your question.";
         }
 
-        var separatorIndex = lastToolMessage.IndexOf(':');
-        if (separatorIndex >= 0 && separatorIndex < lastToolMessage.Length - 1)
-        {
-            var toolResult = lastToolMessage[(separatorIndex + 1)..].Trim();
-            if (!string.IsNullOrWhiteSpace(toolResult))
-            {
-                return toolResult;
-            }
-        }
+        return lastToolMessage.Content;
+    }
 
-        return lastToolMessage;
+    public async ValueTask DisposeAsync()
+    {
+        if (_memoryService is IAsyncDisposable asyncDisposableMemory)
+            await asyncDisposableMemory.DisposeAsync();
+        else if (_memoryService is IDisposable disposableMemory)
+            disposableMemory.Dispose();
+
+        if (_embeddingProvider is IAsyncDisposable asyncDisposableEmbedding)
+            await asyncDisposableEmbedding.DisposeAsync();
+        else if (_embeddingProvider is IDisposable disposableEmbedding)
+            disposableEmbedding.Dispose();
     }
 }

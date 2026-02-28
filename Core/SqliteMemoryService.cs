@@ -3,7 +3,6 @@ using System.IO;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Agentic.Abstractions;
-using Agentic.Stores;
 
 namespace Agentic.Core;
 
@@ -61,7 +60,7 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
 
     public async Task StoreMessageAsync(string id, string content, CancellationToken cancellationToken = default)
     {
-        if (!_initialized) throw new InvalidOperationException("Memory service not initialized.");
+        EnsureInitialized();
 
         var cmd = _connection!.CreateCommand();
         cmd.CommandText = "INSERT OR REPLACE INTO memory(id, content) VALUES($id, $content);";
@@ -72,7 +71,7 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
 
     public async Task<IReadOnlyList<string>> RetrieveRelevantAsync(string query, int topK = 5, CancellationToken cancellationToken = default)
     {
-        if (!_initialized) throw new InvalidOperationException("Memory service not initialized.");
+        EnsureInitialized();
 
         var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -131,7 +130,7 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
 
     public async Task StoreEmbeddingAsync(string id, float[] embedding, CancellationToken cancellationToken = default)
     {
-        if (!_initialized) throw new InvalidOperationException("Memory service not initialized.");
+        EnsureInitialized();
 
         if (_vectorStore is not null)
         {
@@ -148,7 +147,7 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
 
     public async Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(float[] queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
     {
-        if (!_initialized) throw new InvalidOperationException("Memory service not initialized.");
+        EnsureInitialized();
 
         if (_vectorStore is not null)
         {
@@ -175,7 +174,7 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
             var content = reader.GetString(0);
             var embeddingJson = reader.GetString(1);
             var embedding = JsonSerializer.Deserialize<float[]>(embeddingJson)!;
-            var score = CosineSimilarity(queryEmbedding, embedding);
+            var score = VectorMath.CosineSimilarity(queryEmbedding, embedding);
             similarities.Add((content, score));
         }
 
@@ -185,6 +184,14 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
             .ToList();
     }
 
+    private void EnsureInitialized()
+    {
+        if (!_initialized)
+        {
+            throw new InvalidOperationException("Memory service not initialized. Call InitializeAsync first.");
+        }
+    }
+
     private async Task<string?> GetContentByIdAsync(string id, CancellationToken cancellationToken)
     {
         var cmd = _connection!.CreateCommand();
@@ -192,24 +199,6 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
         cmd.Parameters.AddWithValue("$id", id);
         var result = await cmd.ExecuteScalarAsync(cancellationToken);
         return result as string;
-    }
-
-    private static float CosineSimilarity(float[] a, float[] b)
-    {
-        if (a.Length != b.Length)
-        {
-            throw new ArgumentException("Embedding dimensions must match.");
-        }
-
-        float dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-
-        return dot / (MathF.Sqrt(normA) * MathF.Sqrt(normB));
     }
 
     public void Dispose()

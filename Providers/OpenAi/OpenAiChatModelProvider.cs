@@ -4,12 +4,6 @@ using Agentic.Core;
 
 namespace Agentic.Providers.OpenAi;
 
-public sealed class OpenAiProviderOptions
-{
-    public string Model { get; set; } = OpenAiModels.Gpt4oMini;
-    public IReadOnlyList<OpenAiFunctionToolDefinition>? Tools { get; set; }
-}
-
 public sealed class OpenAiChatModelProvider : IModelProvider
 {
     private readonly string _apiKey;
@@ -42,8 +36,12 @@ public sealed record OpenAiFunctionToolParameter(
 
 internal sealed class OpenAiChatModel : IAgentModel
 {
+    private static readonly HttpClient SharedHttpClient = new();
+    private static readonly JsonSerializerOptions PayloadSerializerOptions = new() { WriteIndented = false };
+    private const string ChatCompletionsUrl = "https://api.openai.com/v1/chat/completions";
+
     private readonly string _model;
-    private readonly HttpClient _httpClient = new();
+    private readonly string _apiKey;
     private readonly IReadOnlyList<OpenAiFunctionToolDefinition> _tools;
 
     public OpenAiChatModel(
@@ -51,11 +49,9 @@ internal sealed class OpenAiChatModel : IAgentModel
         string model,
         IReadOnlyList<OpenAiFunctionToolDefinition> tools)
     {
+        _apiKey = apiKey;
         _model = model;
         _tools = tools;
-
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
     }
 
     public async Task<AgentResponse> CompleteAsync(
@@ -64,13 +60,13 @@ internal sealed class OpenAiChatModel : IAgentModel
     {
         var payload = BuildPayload(messages);
 
-        using var content = new StringContent(JsonSerializer.Serialize(payload));
+        using var content = new StringContent(JsonSerializer.Serialize(payload, PayloadSerializerOptions));
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
 
-        using var response = await _httpClient.PostAsync(
-            "https://api.openai.com/v1/chat/completions",
-            content,
-            cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, ChatCompletionsUrl) { Content = content };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+
+        using var response = await SharedHttpClient.SendAsync(request, cancellationToken);
 
         response.EnsureSuccessStatusCode();
 
@@ -140,20 +136,24 @@ internal sealed class OpenAiChatModel : IAgentModel
     {
         if (message.Role == ChatRole.Tool)
         {
-            var parts = message.Content.Split(':', 2);
-            var toolName = parts[0].Trim();
-            var toolResult = parts.Length > 1 ? parts[1].Trim() : string.Empty;
-
+            var toolName = message.ToolName ?? "unknown";
             return new
             {
                 role = "assistant",
-                content = $"Tool '{toolName}' returned: {toolResult}. Use this result to answer the user."
+                content = $"Tool '{toolName}' returned: {message.Content}. Use this result to answer the user."
             };
         }
 
         return new
         {
-            role = message.Role.ToString().ToLowerInvariant(),
+            role = message.Role switch
+            {
+                ChatRole.User => "user",
+                ChatRole.Assistant => "assistant",
+                ChatRole.System => "system",
+                ChatRole.Tool => "tool",
+                _ => message.Role.ToString().ToLowerInvariant()
+            },
             content = message.Content
         };
     }

@@ -6,6 +6,7 @@ using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
 using Agentic.Stores;
+using Agentic.Tests.Fakes;
 using Xunit;
 
 namespace Agentic.Tests;
@@ -30,7 +31,7 @@ public sealed class EmbeddingProviderTests
         var vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new EchoModel()))
+            .WithModelProvider(new FakeModelProvider(new EchoModel()))
             .WithMemory(new InMemoryMemoryService())
             .WithEmbeddingProvider(embeddingProvider)
             .WithVectorStore(vectorStore)
@@ -225,13 +226,5 @@ public sealed class EmbeddingProviderTests
             return Task.FromResult(new AgentResponse("echo"));
         }
     }
-
-    private sealed class TestModelProvider : IModelProvider
-    {
-        private readonly IAgentModel _model;
-
-        public TestModelProvider(IAgentModel model) => _model = model;
-
-        public IAgentModel CreateModel() => _model;
-    }
 }
+

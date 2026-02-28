@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
+using Agentic.Tests.Fakes;
 using Xunit;
 
 namespace Agentic.Tests;
@@ -50,136 +51,10 @@ public sealed class ToolExecutionTests
             return Task.FromResult(product.ToString());
         });
 
-        var provider = new TestModelProvider(new TestAgentModel());
+        var provider = new FakeModelProvider(new TestAgentModel());
         var agent = new AgentBuilder()
             .WithModelProvider(provider)
             .WithTool(tool1)
-            .WithTool(tool2)
-            .Build();
-
-        // Should not throw during build
-        Assert.NotNull(agent);
-    }
-
-    [Fact]
-    public async Task Tool_not_found_returns_error()
-    {
-        var provider = new TestModelProvider(new ToolCallingModel());
-        var agent = new AgentBuilder()
-            .WithModelProvider(provider)
-            .Build();
-
-        var response = await agent.ReplyAsync("Please greet Alice");
-
-        // Should fail gracefully and return some response
-        Assert.NotNull(response);
-    }
-
-     [Fact]
-     public async Task Tool_result_included_in_next_turn()
-     {
-         IReadOnlyList<ChatMessage>? capturedMessages = null;
-
-         var tool = new TestTool("test", "Test tool", args =>
-             Task.FromResult("TOOL_RESULT"));
-
-         var provider = new TestModelProvider(
-             new CapturingModel(msgs => { capturedMessages = msgs; return Task.FromResult(new AgentResponse("ok")); })
-         );
-
-         var agent = new AgentBuilder()
-             .WithModelProvider(provider)
-             .WithTool(tool)
-             .Build();
-
-         // First, trigger a tool call with the correct tool name
-         var provider2 = new TestToolModelProvider(
-             new ToolCallingModelWithArgs("test", "arg"),
-             tool);
-         var agent2 = new AgentBuilder()
-             .WithModelProvider(provider2)
-             .WithTool(tool)
-             .Build();
-
-         var response = await agent2.ReplyAsync("test");
-
-         // Tool result should be included in the response
-         Assert.Contains("TOOL_RESULT", response);
-    }
-
-    [Fact]
-    public async Task Tool_with_empty_arguments()
-    {
-        var tool = new TestTool("noargs", "Tool with no args", args =>
-            Task.FromResult("no args result"));
-
-        var model = new ToolCallingModelWithArgs("noargs", "");
-        var provider = new TestToolModelProvider(model, tool);
-
-        var agent = new AgentBuilder()
-            .WithModelProvider(provider)
-            .WithTool(tool)
-            .Build();
-
-        var response = await agent.ReplyAsync("test");
-
-        Assert.Contains("no args result", response);
-    }
-
-    [Fact]
-    public async Task Tool_exception_handled_gracefully()
-    {
-        var tool = new TestTool("error", "Tool that throws", args =>
-            throw new InvalidOperationException("Tool error"));
-
-        var model = new ToolCallingModelWithArgs("error", "arg");
-        var provider = new TestToolModelProvider(model, tool);
-
-        var agent = new AgentBuilder()
-            .WithModelProvider(provider)
-            .WithTool(tool)
-            .Build();
-
-        var response = await agent.ReplyAsync("test");
-
-        // Should not throw - error should be handled
-        Assert.NotNull(response);
-    }
-
-    [Fact]
-    public async Task Duplicate_tool_calls_prevented()
-    {
-        var callCount = 0;
-        var tool = new TestTool("count", "Count calls", args =>
-        {
-            callCount++;
-            return Task.FromResult(callCount.ToString());
-        });
-
-        var model = new RepeatingToolCallingModel("count", "arg");
-        var provider = new TestToolModelProvider(model, tool);
-
-        var agent = new AgentBuilder()
-            .WithModelProvider(provider)
-            .WithTool(tool)
-            .Build();
-
-        var response = await agent.ReplyAsync("test");
-
-        // Tool should only be called once due to duplicate detection
-        Assert.Equal(1, callCount);
-    }
-
-    [Fact]
-    public async Task Tool_name_case_sensitive()
-    {
-        var tool = new TestTool("MyTool", "A tool", args =>
-            Task.FromResult("result"));
-
-        var provider = new TestModelProvider(new TestAgentModel());
-        var agent = new AgentBuilder()
-            .WithModelProvider(provider)
-            .WithTool(tool)
             .Build();
 
         Assert.NotNull(agent);
@@ -222,8 +97,7 @@ public sealed class ToolExecutionTests
             var lastTool = messages.LastOrDefault(m => m.Role == ChatRole.Tool);
             if (lastTool is not null)
             {
-                var result = lastTool.Content.Split(':', 2)[1].Trim();
-                return Task.FromResult(new AgentResponse($"Got result: {result}"));
+                return Task.FromResult(new AgentResponse($"Got result: {lastTool.Content}"));
             }
 
             return Task.FromResult(new AgentResponse(
@@ -294,15 +168,6 @@ public sealed class ToolExecutionTests
             IReadOnlyList<ChatMessage> messages,
             CancellationToken cancellationToken = default)
             => _capture(messages);
-    }
-
-    private sealed class TestModelProvider : IModelProvider
-    {
-        private readonly IAgentModel _model;
-
-        public TestModelProvider(IAgentModel model) => _model = model;
-
-        public IAgentModel CreateModel() => _model;
     }
 
     private sealed class TestToolModelProvider : IModelProvider

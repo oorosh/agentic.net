@@ -8,9 +8,11 @@ namespace Agentic.Providers.OpenAi;
 /// </summary>
 public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
 {
+    private static readonly HttpClient SharedHttpClient = new();
+    private const string EmbeddingsUrl = "https://api.openai.com/v1/embeddings";
+
     private readonly string _apiKey;
     private readonly string _model;
-    private readonly HttpClient _httpClient = new();
 
     /// <summary>
     /// Creates a new OpenAI embedding provider.
@@ -21,9 +23,6 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
     {
         _apiKey = apiKey;
         _model = model;
-
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
     }
 
     /// <summary>
@@ -56,10 +55,10 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
         using var content = new StringContent(JsonSerializer.Serialize(payload));
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
 
-        using var response = await _httpClient.PostAsync(
-            "https://api.openai.com/v1/embeddings",
-            content,
-            cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, EmbeddingsUrl) { Content = content };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+
+        using var response = await SharedHttpClient.SendAsync(request, cancellationToken);
 
         response.EnsureSuccessStatusCode();
 

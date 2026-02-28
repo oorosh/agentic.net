@@ -8,7 +8,7 @@ public enum ChatRole
     Tool
 }
 
-public sealed record ChatMessage(ChatRole Role, string Content);
+public sealed record ChatMessage(ChatRole Role, string Content, string? ToolName = null);
 
 public sealed record AgentToolCall(string Name, string Arguments);
 

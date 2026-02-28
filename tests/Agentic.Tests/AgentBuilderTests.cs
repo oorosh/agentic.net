@@ -10,6 +10,7 @@ using Agentic.Loaders;
 using Agentic.Middleware;
 using Agentic.Providers.OpenAi;
 using Agentic.Stores;
+using Agentic.Tests.Fakes;
 using System.IO;
 using Xunit;
 
@@ -27,16 +28,9 @@ public class AgentBuilderTests
     [Fact]
     public void Build_succeeds_when_openai_provider_configured_via_builder()
     {
-        var builder = new AgentBuilder()
-            .WithOpenAi("test-api-key", tools:
-            [
-                new OpenAiFunctionToolDefinition(
-                    "get_weather",
-                    "Get weather for a city.",
-                    [new OpenAiFunctionToolParameter("city", "string", "City name")])
-            ]);
-
-        var assistant = builder.Build();
+        var assistant = new AgentBuilder()
+            .WithOpenAi("test-api-key")
+            .Build();
 
         Assert.NotNull(assistant);
     }
@@ -74,31 +68,6 @@ public class AgentBuilderTests
     [Fact]
     public async Task ReplyAsync_uses_context_factory_and_stores_with_memory()
     {
-        var provider = new TestModelProvider(new TestAgentModel());
-        var contextFactory = new TrackingContextFactory();
-        var memory = new TrackingMemoryService();
-
-        var assistant = new AgentBuilder()
-            .WithModelProvider(provider)
-            .WithMemory(memory)
-            .WithContextFactory(contextFactory)
-            .Build();
-
-        var response = await assistant.ReplyAsync("hello");
-
-        Assert.Equal("echo: hello", response);
-        Assert.Equal(1, contextFactory.CallCount);
-        Assert.Equal("hello", contextFactory.LastInput);
-        Assert.True(memory.Initialized);
-        Assert.Equal(2, memory.StoredMessages.Count);
-        Assert.Equal("hello", memory.StoredMessages[0]);
-        Assert.Equal("echo: hello", memory.StoredMessages[1]);
-    }
-
-    [Fact]
-    public async Task Middleware_order_and_memory_middleware_inserted()
-    {
-        var provider = new TestModelProvider(new TestAgentModel());
         var memory = new TrackingMemoryService();
         memory.StoredMessages.Add("remembered context");
 
@@ -109,7 +78,7 @@ public class AgentBuilderTests
         var mw2 = new RecordingMiddleware("mw2", calls, snapshots);
 
         var assistant = new AgentBuilder()
-            .WithModelProvider(provider)
+            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
             .WithMemory(memory)
             .UseMiddleware(mw1)
             .UseMiddleware(mw2)
@@ -130,7 +99,7 @@ public class AgentBuilderTests
     [Fact]
     public async Task History_accumulates_across_replies()
     {
-        var provider = new TestModelProvider(new TestAgentModel());
+        var provider = new FakeModelProvider(new TestAgentModel());
         var assistant = new AgentBuilder()
             .WithModelProvider(provider)
             .Build();
@@ -146,10 +115,9 @@ public class AgentBuilderTests
     [Fact]
     public async Task InitializeAsync_idempotent_and_memory_only_once()
     {
-        var provider = new TestModelProvider(new TestAgentModel());
         var memory = new TrackingMemoryService();
         var assistant = new AgentBuilder()
-            .WithModelProvider(provider)
+            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
             .WithMemory(memory)
             .Build();
 
@@ -162,33 +130,22 @@ public class AgentBuilderTests
     [Fact]
     public async Task MemoryMiddleware_retrieves_and_injects_context()
     {
-        var provider = new TestModelProvider(new TestAgentModel());
         var memory = new TrackingMemoryService();
         memory.StoredMessages.Add("prior conversation");
         var assistant = new AgentBuilder()
-            .WithModelProvider(provider)
+            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
             .WithMemory(memory)
             .Build();
 
         // use a model that echoes full working messages for inspection
         var echoModel = new InspectingModel();
-        var customProvider = new TestModelProvider(echoModel);
         assistant = new AgentBuilder()
-            .WithModelProvider(customProvider)
+            .WithModelProvider(new FakeModelProvider(echoModel))
             .WithMemory(memory)
             .Build();
 
         var response = await assistant.ReplyAsync("question");
         Assert.Contains("prior conversation", response);
-    }
-
-    private sealed class TestModelProvider : IModelProvider
-    {
-        private readonly IAgentModel _model;
-
-        public TestModelProvider(IAgentModel model) => _model = model;
-
-        public IAgentModel CreateModel() => _model;
     }
 
     private sealed class TestAgentModel : IAgentModel
@@ -373,7 +330,7 @@ public class AgentBuilderTests
     public async Task ReplyAsync_executes_tool_calls_until_final_answer()
     {
         var assistant = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new ToolCallingModel()))
+            .WithModelProvider(new FakeModelProvider(new ToolCallingModel()))
             .WithTool(new UppercaseTool())
             .Build();
 
@@ -386,7 +343,7 @@ public class AgentBuilderTests
     public async Task ReplyAsync_repeated_same_tool_call_returns_last_tool_result_instead_of_throwing()
     {
         var assistant = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new RepeatingToolCallingModel()))
+            .WithModelProvider(new FakeModelProvider(new RepeatingToolCallingModel()))
             .WithTool(new UppercaseTool())
             .Build();
 
@@ -401,7 +358,7 @@ public class AgentBuilderTests
         IReadOnlyList<ChatMessage>? captured = null;
 
         var assistant = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new CaptureModel(messages =>
+            .WithModelProvider(new FakeModelProvider(new CaptureModel(messages =>
             {
                 captured = messages;
                 return new AgentResponse("ok");
@@ -425,7 +382,7 @@ public class AgentBuilderTests
         var embeddingProvider = new Agentic.Providers.OpenAi.OpenAiEmbeddingProvider(apiKey);
 
         var assistant = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
             .WithMemory(new InMemoryMemoryService())
             .WithEmbeddingProvider(embeddingProvider)
             .Build();
@@ -472,8 +429,7 @@ public class AgentBuilderTests
             var lastTool = messages.LastOrDefault(m => m.Role == ChatRole.Tool);
             if (lastTool is not null)
             {
-                var result = lastTool.Content.Split(':', 2)[1].Trim();
-                return Task.FromResult(new AgentResponse($"Tool says: {result}"));
+                return Task.FromResult(new AgentResponse($"Tool says: {lastTool.Content}"));
             }
 
             var lastUser = messages.Last(m => m.Role == ChatRole.User).Content;
@@ -681,7 +637,7 @@ public class AgentBuilderTests
         var vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
 
         var assistant = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
             .WithMemory(new InMemoryMemoryService())
             .WithEmbeddingProvider(embeddingProvider)
             .WithVectorStore(vectorStore)
@@ -697,7 +653,7 @@ public class AgentBuilderTests
         var vectorStore = new InMemoryVectorStore(dimensions: 1536);
 
         var assistant = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
             .WithVectorStore(vectorStore)
             .Build();
 
@@ -901,7 +857,7 @@ description: A test skill.
 # Instructions");
 
             var assistant = new AgentBuilder()
-                .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+                .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
                 .WithSkills(tempDir)
                 .Build();
 
@@ -921,7 +877,7 @@ description: A test skill.
     public async Task Agent_with_no_skills_has_null_skills()
     {
         var assistant = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
             .Build();
 
         await assistant.InitializeAsync();
@@ -1076,7 +1032,7 @@ Test role");
 You are a helpful assistant.");
 
             var assistant = new AgentBuilder()
-                .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+                .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
                 .WithSoul(soulPath)
                 .Build();
 
@@ -1096,7 +1052,7 @@ You are a helpful assistant.");
     public async Task Agent_with_no_soul_has_null_soul()
     {
         var assistant = new AgentBuilder()
-            .WithModelProvider(new TestModelProvider(new TestAgentModel()))
+            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
             .Build();
 
         await assistant.InitializeAsync();

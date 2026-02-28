@@ -1,6 +1,8 @@
 namespace Agentic.Core;
 
+using System.Collections.Concurrent;
 using System.Globalization;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Agentic.Abstractions;
@@ -11,6 +13,11 @@ using Agentic.Abstractions;
 /// </summary>
 public sealed class ToolParameterBinder
 {
+    // Fix 9: Cache PropertyInfo per (toolType, paramName) to avoid repeated reflection
+    private static readonly ConcurrentDictionary<(Type ToolType, string ParamName), PropertyInfo?> PropertyCache = new();
+    // Fix 16: Cache compiled Regex instances per pattern to avoid recompiling on every call
+    private static readonly ConcurrentDictionary<string, Regex> RegexCache = new();
+
     /// <summary>
     /// Parses and binds JSON arguments to tool properties based on parameter metadata.
     /// Validates all constraints and applies default values.
@@ -28,7 +35,10 @@ public sealed class ToolParameterBinder
 
             foreach (var param in parameters)
             {
-                var property = tool.GetType().GetProperty(param.Name);
+                var property = PropertyCache.GetOrAdd(
+                    (tool.GetType(), param.Name),
+                    key => key.ToolType.GetProperty(key.ParamName));
+
                 if (property is null)
                     continue;
 
@@ -159,7 +169,8 @@ public sealed class ToolParameterBinder
         // Pattern validation
         if (!string.IsNullOrEmpty(param.Pattern) && value is string stringVal)
         {
-            if (!Regex.IsMatch(stringVal, param.Pattern))
+            var regex = RegexCache.GetOrAdd(param.Pattern, pattern => new Regex(pattern, RegexOptions.Compiled));
+            if (!regex.IsMatch(stringVal))
             {
                 throw new InvalidOperationException(
                     $"Parameter '{param.Name}' does not match required pattern: {param.Pattern}");
