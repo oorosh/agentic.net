@@ -2,7 +2,7 @@
 
 ![Agentic.NET logo](logo.png)
 
-Create AI assistants in .NET with pluggable models, memory, middleware, tools, skills, and identity.
+Build AI agents in .NET with pluggable models, memory, middleware, tools, skills, and identity.
 
 The library exposes a minimal runtime with:
 
@@ -13,6 +13,7 @@ The library exposes a minimal runtime with:
 - optional identity (`ISoulLoader`) from SOUL.md format
 - middleware hooks (`IAssistantMiddleware`) to preprocess or postprocess conversation
 - a tool‑calling mechanism (`ITool`) that the model can invoke
+- optional heartbeat (`IHeartbeatService`) for proactive, time-driven agent behavior
 
 Designed for clarity and composability, the API lets your app stay in control while leverage AI logic.
 
@@ -144,6 +145,36 @@ public sealed class DemoModel : IAgentModel
     }
 }
 ```
+## Heartbeat
+
+Give your agent a timer-driven "heartbeat" so it can take initiative without waiting for user input — useful for reminders, background monitoring, or proactive status updates.
+
+```csharp
+var agent = new AgentBuilder()
+    .WithOpenAi(apiKey)
+    .WithHeartbeat(interval: TimeSpan.FromMinutes(5))
+    .Build();
+
+await agent.InitializeAsync();
+
+// Start the heartbeat loop
+await agent.Heartbeat!.StartAsync();
+
+// Each tick fires the Ticked event
+agent.Heartbeat.Ticked += (_, result) =>
+{
+    if (!result.Skipped && !result.Silent)
+        Console.WriteLine($"[Agent] {result.Response}");
+};
+```
+
+Key options via `HeartbeatOptions`:
+- `Interval` — how often to tick (default: 5 minutes)
+- `SilentToken` — response prefix the model uses to indicate "nothing to say" (default: `"HEARTBEAT_OK"`)
+- `SilentTokenMaxChars` — how many leading characters to check for the silent token (default: 300)
+
+**See:** [Heartbeat guide](docs/heartbeat.md) | [ProactiveAssistant sample](samples/ProactiveAssistant/)
+
 ## Typical integration pattern
 
 1. Choose a model setup:
@@ -155,7 +186,8 @@ public sealed class DemoModel : IAgentModel
 5. Optionally add identity with `WithSoul()` or `WithSoul(path)`.
 6. Optionally add middleware with `WithMiddleware(...)`.
 7. Optionally register tools with `WithTool(...)`.
-8. Call `ReplyAsync(...)` from your app/service/controller.
+8. Optionally enable proactive behavior with `WithHeartbeat(...)`.
+9. Call `ReplyAsync(...)` from your app/service/controller.
 
 ## Key concepts
 
@@ -168,6 +200,9 @@ public sealed class DemoModel : IAgentModel
 - `ISkillLoader`: loads agent skills from filesystem.
 - `ISoulLoader`: loads agent identity from SOUL.md; supports dynamic personality updates with `ReloadSoulAsync()` and `UpdateSoulAsync()`.
 - `IPersistentSoulLoader`: extension for read-write SOUL implementations enabling personality learning.
+- `IHeartbeatService`: drives proactive, time-based agent ticks independently of user input.
+- `HeartbeatOptions`: configures tick interval, silent token, and quiet-hours.
+- `HeartbeatResult`: result of a single heartbeat tick — includes `TickedAt`, `Skipped`, `SkipReason`, `Silent`, `Response`, and `Duration`.
 - `ITool`: executable function the model can request.
 - `ToolParameterAttribute`: attribute-based parameter definition enabling type-safe tool arguments with automatic validation and JSON schema generation.
 - `AgenticToolAttribute`: marks a tool class for automatic discovery via `WithToolsFromAssembly` / `WithToolsFromCallingAssembly`.
@@ -224,7 +259,7 @@ dotnet run --project samples/SafeguardMiddleware/SafeguardMiddleware.csproj
 
 ### Personal Assistant (`samples/PersonalAssistant`)
 
-A complete AI assistant with persistent memory and real OpenAI integration. Features:
+An example of a persistent agent use case: OpenAI-backed agent with SQLite conversation memory and optional semantic embeddings. Features:
 - SQLite-based persistent conversation storage
 - Optional semantic embeddings for enhanced recall
 - Memory restoration across application restarts
@@ -269,6 +304,20 @@ OPENAI_API_KEY=your_key dotnet run --project samples/StructuredTools/StructuredT
 ```
 
 **See:** [Structured Tools README](samples/StructuredTools/README.md)
+
+### Proactive Assistant (`samples/ProactiveAssistant`)
+
+Demonstrates the heartbeat feature — the agent wakes up on a timer and generates proactive messages without any user input. Features:
+- Time-driven ticks via `IHeartbeatService`
+- Configurable interval and quiet-hours via `HeartbeatOptions`
+- Silent-token suppression (no output when the model has nothing useful to say)
+- Skippable ticks when a user interaction is already in flight
+
+```bash
+OPENAI_API_KEY=your_key dotnet run --project samples/ProactiveAssistant/ProactiveAssistant.csproj
+```
+
+**See:** [Heartbeat guide](docs/heartbeat.md)
 
 ### Middleware Examples
 
@@ -430,6 +479,9 @@ agent.reply                          ← one per ReplyAsync call
 | `agentic.tool.call.duration` | Histogram | `ms` | Per-tool execution latency |
 | `agentic.memory.retrieval.count` | Counter | `{retrieval}` | Memory retrieval operations |
 | `agentic.memory.retrieval.items` | Histogram | `{item}` | Items returned per retrieval |
+| `agentic.heartbeat` | Counter | `{tick}` | Heartbeat ticks fired |
+| `agentic.heartbeat.duration` | Histogram | `ms` | Duration of each heartbeat tick |
+| `agentic.heartbeat.skip` | Counter | `{skip}` | Heartbeat ticks skipped (with `agentic.heartbeat.skip.reason` tag) |
 
 ## Environment Variables
 
@@ -447,8 +499,8 @@ Samples that use OpenAI require the following environment variables:
 |---|---|
 | `AgentBuilder` | `using Agentic.Builder;` |
 | `OpenAiModels` constants | `using Agentic.Providers.OpenAi;` |
-| `ITool`, `ToolParameterAttribute`, `IMemoryService` | `using Agentic.Abstractions;` |
-| `ChatMessage`, `ChatRole`, `AgentReply`, `SqliteMemoryService` | `using Agentic.Core;` |
+| `ITool`, `ToolParameterAttribute`, `IMemoryService`, `IHeartbeatService` | `using Agentic.Abstractions;` |
+| `ChatMessage`, `ChatRole`, `AgentReply`, `SqliteMemoryService`, `HeartbeatOptions`, `HeartbeatResult`, `HeartbeatSkipReason` | `using Agentic.Core;` |
 | `IAssistantMiddleware`, `AgentContext`, `AgentHandler` | `using Agentic.Middleware;` |
 | `InMemoryVectorStore`, `PgVectorStore` | `using Agentic.Stores;` |
 | `OpenAiEmbeddingProvider` | `using Agentic.Providers.OpenAi;` |

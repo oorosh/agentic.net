@@ -764,7 +764,7 @@ var reply = await agent.ReplyAsync("Summarise this: " + longText);
 Console.WriteLine(reply.Content);
 ```
 
-### Persistent personal assistant
+### Persistent agent (e.g. personal assistant)
 
 ```csharp
 var agent = new AgentBuilder()

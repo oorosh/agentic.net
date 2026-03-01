@@ -1,6 +1,6 @@
 # Personal Assistant Sample
 
-This sample demonstrates a complete AI personal assistant using OpenAI with persistent SQLite memory storage and optional semantic embeddings for enhanced context recall.
+This sample demonstrates one use case for Agentic.NET: an agent with persistent SQLite memory and optional semantic embeddings, configured to act as a personal assistant.
 
 ## Key Features Demonstrated
 
@@ -60,58 +60,42 @@ Assistant: You mentioned that you love coffee. Is there anything else you'd like
 
 ### Memory Setup with SQLite
 
+Pass `SqliteMemoryService` directly to `WithMemory()` — no manual initialisation needed:
+
 ```csharp
-using var memoryService = new SqliteMemoryService();
-await memoryService.InitializeAsync();
+var builder = new AgentBuilder()
+    .WithOpenAi(apiKey, model: model)
+    .WithMemory(new SqliteMemoryService());
 ```
 
 ### Optional Embeddings Configuration
 
+For development, use the convenience `WithSemanticMemory()` shorthand:
+
 ```csharp
-IEmbeddingProvider? embeddingProvider = null;
-IVectorStore? vectorStore = null;
-var useEmbeddings = Environment.GetEnvironmentVariable("USE_EMBEDDINGS")?.ToLower() == "true";
-var usePgVector = Environment.GetEnvironmentVariable("USE_PGVECTOR")?.ToLower() == "true";
-
-if (useEmbeddings)
-{
-    embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
-    await embeddingProvider.InitializeAsync();
-
-    if (usePgVector)
-    {
-        vectorStore = new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
-    }
-    else
-    {
-        vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
-    }
-}
+// Development: in-memory vector store (single call)
+builder = builder.WithSemanticMemory(apiKey);
 ```
 
-### Memory Restoration on Startup
+For production with pgvector:
 
 ```csharp
-var restored = await memoryService.RetrieveRelevantAsync(string.Empty, topK: 100);
-if (restored.Count > 0)
-{
-    Console.WriteLine($"(loaded {restored.Count} items from memory)");
-}
+var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
+await embeddingProvider.InitializeAsync();
+var vectorStore = new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
+
+builder = builder
+    .WithMemory(new SqliteMemoryService(vectorStore))
+    .WithEmbeddingProvider(embeddingProvider)
+    .WithVectorStore(vectorStore);
 ```
 
 ### Agent Configuration
 
 ```csharp
-var builder = new AgentBuilder()
-    .WithOpenAi(apiKey, model: model)
-    .WithMemory(memoryService);
-
-if (embeddingProvider != null)
-{
-    builder = builder
-        .WithEmbeddingProvider(embeddingProvider)
-        .WithVectorStore(vectorStore!);
-}
+var assistant = builder.Build();
+var reply = await assistant.ReplyAsync(input);
+Console.WriteLine(reply.Content);
 ```
 
 ## Adding Skills and SOUL

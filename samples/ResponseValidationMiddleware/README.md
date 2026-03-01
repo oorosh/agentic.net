@@ -74,7 +74,7 @@ If all retries fail, returns helpful fallback message.
 ```csharp
 var agent = new AgentBuilder()
     .WithOpenAi(apiKey)
-    .UseMiddleware(new ResponseValidationMiddleware())
+    .WithMiddleware(new ResponseValidationMiddleware())
     .Build();
 
 // Now all responses are validated automatically
@@ -141,11 +141,11 @@ if (response.Length < 100 && context.Input.Contains("explain"))
 ```csharp
 var agent = new AgentBuilder()
     .WithOpenAi(apiKey)
-    .UseMiddleware(new RateLimitingMiddleware())     // Block bad users
-    .UseMiddleware(new InputValidationMiddleware())  // Block bad inputs
-    .UseMiddleware(new ErrorHandlingMiddleware())    // Retry transient errors
-    .UseMiddleware(new ResponseValidationMiddleware()) // Check output quality
-    .UseMiddleware(new CachingMiddleware())          // Cache good responses
+    .WithMiddleware(new RateLimitingMiddleware())     // Block bad users
+    .WithMiddleware(new InputValidationMiddleware())  // Block bad inputs
+    .WithMiddleware(new ErrorHandlingMiddleware())    // Retry transient errors
+    .WithMiddleware(new ResponseValidationMiddleware()) // Check output quality
+    .WithMiddleware(new CachingMiddleware())          // Cache good responses
     .Build();
 ```
 

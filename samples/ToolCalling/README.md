@@ -41,17 +41,11 @@ Assistant: Paris: 5°C, clear sky
 
 ### Tool Registration
 
+Register tools with `WithTool()`. Tool parameters are declared as properties decorated with `[ToolParameter]` — Agentic.NET automatically generates the function schema for the model.
+
 ```csharp
 var assistant = new AgentBuilder()
-    .WithOpenAi(
-        apiKey,
-        model,
-        tools: [
-            new OpenAiFunctionToolDefinition(
-                "get_weather",
-                "Get weather for a city.",
-                [new OpenAiFunctionToolParameter("city", "string", "City name")])
-        ])
+    .WithOpenAi(apiKey, model)
     .WithTool(new GetWeatherTool())
     .Build();
 ```
@@ -62,11 +56,14 @@ var assistant = new AgentBuilder()
 public sealed class GetWeatherTool : ITool
 {
     public string Name => "get_weather";
-    public string Description => "Returns a mocked weather report for a city.";
+    public string Description => "Get the current weather for a city.";
+
+    [ToolParameter(Description = "The name of the city", Required = true)]
+    public string City { get; set; } = "";
 
     public Task<string> InvokeAsync(string arguments, CancellationToken cancellationToken = default)
     {
-        var city = string.IsNullOrWhiteSpace(arguments) ? "Belgrade" : arguments;
+        var city = string.IsNullOrWhiteSpace(City) ? "Belgrade" : City;
         var report = $"{city}: 5°C, clear sky";
         return Task.FromResult(report);
     }
@@ -75,9 +72,9 @@ public sealed class GetWeatherTool : ITool
 
 ## How It Works
 
-1. **Tool Definition**: The `OpenAiFunctionToolDefinition` tells OpenAI about available functions
-2. **Tool Implementation**: The `ITool` class provides the actual function logic
-3. **Function Calling**: When the user asks about weather, OpenAI responds with a function call
-4. **Execution**: Agentic.NET executes the tool and includes the result in the conversation
+1. **Tool Declaration**: Properties decorated with `[ToolParameter]` define the function schema sent to the model
+2. **Tool Registration**: `WithTool()` registers the tool with the agent
+3. **Function Calling**: When the user asks about weather, the model responds with a function call
+4. **Execution**: Agentic.NET deserializes the arguments into the tool's properties and invokes `InvokeAsync`
 
 This sample shows how to extend AI assistants with external capabilities, enabling more powerful and interactive applications.
