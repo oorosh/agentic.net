@@ -93,6 +93,16 @@ public sealed class DemoModel : IAgentModel
 
         return Task.FromResult(new AgentResponse($"I noted: {lastUserMessage}"));
     }
+
+    public async IAsyncEnumerable<StreamingToken> StreamAsync(
+        IReadOnlyList<ChatMessage> messages,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var response = await CompleteAsync(messages, cancellationToken);
+        if (!string.IsNullOrEmpty(response.Content))
+            yield return new StreamingToken(response.Content, IsComplete: false);
+        yield return new StreamingToken(string.Empty, IsComplete: true);
+    }
 }
 
 public sealed class ToneMiddleware : IAssistantMiddleware

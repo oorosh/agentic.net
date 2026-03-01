@@ -49,4 +49,14 @@ public sealed class EchoModel : IAgentModel
         var response = lastUserMessage.Contains("test") ? $"This contains bad content." : $"Echo: {lastUserMessage}";
         return Task.FromResult(new AgentResponse(response));
     }
+
+    public async IAsyncEnumerable<StreamingToken> StreamAsync(
+        IReadOnlyList<ChatMessage> messages,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var response = await CompleteAsync(messages, cancellationToken);
+        if (!string.IsNullOrEmpty(response.Content))
+            yield return new StreamingToken(response.Content, IsComplete: false);
+        yield return new StreamingToken(string.Empty, IsComplete: true);
+    }
 }

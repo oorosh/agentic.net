@@ -86,6 +86,9 @@ public sealed class ToolExecutionTests
         {
             return Task.FromResult(new AgentResponse("ok"));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+            => FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class ToolCallingModel : IAgentModel
@@ -104,6 +107,9 @@ public sealed class ToolExecutionTests
                 "Calling tool",
                 new List<AgentToolCall> { new("greet", "Alice") }));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+            => FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class ToolCallingModelWithArgs : IAgentModel
@@ -131,6 +137,9 @@ public sealed class ToolExecutionTests
                 "Calling tool",
                 new List<AgentToolCall> { new(_toolName, _args) }));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+            => FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class RepeatingToolCallingModel : IAgentModel
@@ -153,6 +162,9 @@ public sealed class ToolExecutionTests
                 "Calling same tool",
                 new List<AgentToolCall> { new(_toolName, _args) }));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+            => FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class CapturingModel : IAgentModel
@@ -168,6 +180,9 @@ public sealed class ToolExecutionTests
             IReadOnlyList<ChatMessage> messages,
             CancellationToken cancellationToken = default)
             => _capture(messages);
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+            => FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class TestToolModelProvider : IModelProvider

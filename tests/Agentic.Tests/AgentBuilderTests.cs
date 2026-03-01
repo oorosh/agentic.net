@@ -157,6 +157,11 @@ public class AgentBuilderTests
             var lastUser = messages.Last(m => m.Role == ChatRole.User).Content;
             return Task.FromResult(new AgentResponse("echo: " + lastUser));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class TrackingContextFactory : IAssistantContextFactory
@@ -424,6 +429,11 @@ public class AgentBuilderTests
             var combined = string.Join("|", messages.Select(m => m.Content));
             return Task.FromResult(new AgentResponse(combined));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class ToolCallingModel : IAgentModel
@@ -445,6 +455,11 @@ public class AgentBuilderTests
 
             return Task.FromResult(new AgentResponse("Calling tool", toolCalls));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class CaptureModel : IAgentModel
@@ -460,6 +475,11 @@ public class AgentBuilderTests
         {
             return Task.FromResult(_capture(messages));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class RepeatingToolCallingModel : IAgentModel
@@ -475,6 +495,11 @@ public class AgentBuilderTests
 
             return Task.FromResult(new AgentResponse("Still calling tool", toolCalls));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class UppercaseTool : ITool
@@ -508,6 +533,11 @@ public class AgentBuilderTests
                 var ctx = new AgentContext(messages.Last(m => m.Role == ChatRole.User).Content, messages);
                 return _fn(ctx);
             }
+
+            public IAsyncEnumerable<StreamingToken> StreamAsync(
+                IReadOnlyList<ChatMessage> messages,
+                CancellationToken cancellationToken = default) =>
+                FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
         }
     }
 

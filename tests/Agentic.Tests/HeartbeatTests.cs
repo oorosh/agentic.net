@@ -406,6 +406,11 @@ public class HeartbeatTests
             IReadOnlyList<ChatMessage> messages,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new AgentResponse(_response));
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class BlockingAgentModel : IAgentModel
@@ -420,5 +425,10 @@ public class HeartbeatTests
             var content = await _responseTask;
             return new AgentResponse(content);
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 }

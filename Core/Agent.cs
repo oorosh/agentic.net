@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using Agentic.Abstractions;
@@ -25,6 +26,7 @@ public sealed class Agent : IAgent, IAsyncDisposable
     private static readonly ConcurrentDictionary<Type, IReadOnlyList<IToolParameterMetadata>> ParameterMetadataCache = new();
     // Fix 8: cache the middleware pipeline — tools and middlewares don't change after construction
     private AgentHandler? _pipeline;
+    private AgentStreamingHandler? _streamingPipeline;
     // Fix 14: cache the tool catalog string (built once since tools don't change after construction)
     private string? _toolCatalogMessage;
     // Soul and Skills system prompt cached after first InitializeAsync
@@ -132,19 +134,7 @@ public sealed class Agent : IAgent, IAsyncDisposable
         var sw = Stopwatch.StartNew();
         try
         {
-            var context = _contextFactory.Create(input, _history);
-
-            if (_tools.Count > 0)
-            {
-                _toolCatalogMessage ??= BuildToolCatalogMessage(_tools.Values);
-                context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, _toolCatalogMessage));
-            }
-
-            if (_soulAndSkillsMessage is not null)
-            {
-                context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, _soulAndSkillsMessage));
-            }
-
+            var context = PrepareContext(input);
             var handler = _pipeline ??= BuildPipeline();
             var response = await RunToolLoopAsync(context, handler, cancellationToken);
 
@@ -161,13 +151,138 @@ public sealed class Agent : IAgent, IAsyncDisposable
             AgenticTelemetry.ReplyCounter.Add(1);
             AgenticTelemetry.ReplyDuration.Record(sw.Elapsed.TotalMilliseconds);
 
-            return new AgentReply(response.Content, userMessage, assistantMessage);
+            return new AgentReply(
+                response.Content,
+                userMessage,
+                assistantMessage,
+                Usage: response.Usage,
+                FinishReason: response.FinishReason,
+                ModelId: response.ModelId,
+                Duration: sw.Elapsed);
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             throw;
         }
+    }
+
+    public async IAsyncEnumerable<StreamingToken> StreamAsync(
+        string input,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (!_initialized)
+            await InitializeAsync(cancellationToken);
+
+        using var activity = AgenticTelemetry.ActivitySource.StartActivity(AgenticTelemetry.Spans.Reply);
+        activity?.SetTag(AgenticTelemetry.Tags.AgentHistoryLen, _history.Count);
+
+        var sw = Stopwatch.StartNew();
+
+        var context = PrepareContext(input);
+        var streamingHandler = _streamingPipeline ??= BuildStreamingPipeline();
+
+        // Accumulate full content and metadata for history/memory
+        var contentBuilder = new StringBuilder();
+        StreamingToken? finalToken = null;
+
+        // Stream from the model; if the response contains tool calls, we resolve the
+        // tool loop without streaming (same as ReplyAsync) and then stream the final answer.
+        IReadOnlyList<AgentToolCall>? pendingToolCalls = null;
+
+        await foreach (var token in streamingHandler(context, cancellationToken).WithCancellation(cancellationToken))
+        {
+            if (!token.IsComplete)
+            {
+                contentBuilder.Append(token.Delta);
+                yield return token;
+            }
+            else
+            {
+                finalToken = token;
+                pendingToolCalls = token.ToolCalls;
+            }
+        }
+
+        // If the model returned tool calls we need to resolve them before we can
+        // give the user a final streamed answer.
+        if (pendingToolCalls is { Count: > 0 })
+        {
+            // Build an AgentResponse from the streamed tool-call intent so RunToolLoopAsync
+            // can continue from this point.
+            var toolCallResponse = new AgentResponse(
+                contentBuilder.ToString(),
+                pendingToolCalls,
+                finalToken?.FinalUsage,
+                finalToken?.FinishReason,
+                finalToken?.ModelId);
+
+            // Add the assistant tool-call message to working context
+            context.WorkingMessages.Add(new ChatMessage(
+                ChatRole.Assistant,
+                toolCallResponse.Content,
+                ToolCalls: toolCallResponse.ToolCalls));
+
+            var syncHandler = _pipeline ??= BuildPipeline();
+            var resolvedResponse = await RunToolLoopFromToolCallsAsync(context, toolCallResponse, syncHandler, cancellationToken);
+
+            // Now stream the final resolved answer
+            contentBuilder.Clear();
+            await foreach (var token in streamingHandler(context, cancellationToken).WithCancellation(cancellationToken))
+            {
+                if (!token.IsComplete)
+                {
+                    contentBuilder.Append(token.Delta);
+                    yield return token;
+                }
+                else
+                {
+                    finalToken = token;
+                }
+            }
+
+            _ = resolvedResponse; // consumed for side-effects (tool execution)
+        }
+
+        var fullContent = contentBuilder.ToString();
+        var userMessage = new ChatMessage(ChatRole.User, input);
+        var assistantMessage = new ChatMessage(ChatRole.Assistant, fullContent);
+
+        _history.Add(userMessage);
+        _history.Add(assistantMessage);
+
+        await PersistToMemoryAsync(input, fullContent, cancellationToken);
+        await MaybeLearnFromConversationAsync(input, fullContent, cancellationToken);
+
+        sw.Stop();
+        AgenticTelemetry.ReplyCounter.Add(1);
+        AgenticTelemetry.ReplyDuration.Record(sw.Elapsed.TotalMilliseconds);
+
+        // Emit final sentinel
+        yield return new StreamingToken(
+            Delta: string.Empty,
+            IsComplete: true,
+            FinalUsage: finalToken?.FinalUsage,
+            FinishReason: finalToken?.FinishReason,
+            ModelId: finalToken?.ModelId);
+    }
+
+    private AgentContext PrepareContext(string input)
+    {
+        var context = _contextFactory.Create(input, _history);
+
+        if (_tools.Count > 0)
+        {
+            _toolCatalogMessage ??= BuildToolCatalogMessage(_tools.Values);
+            context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, _toolCatalogMessage));
+        }
+
+        if (_soulAndSkillsMessage is not null)
+        {
+            context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, _soulAndSkillsMessage));
+        }
+
+        return context;
     }
 
     private AgentHandler BuildPipeline()
@@ -184,6 +299,20 @@ public sealed class Agent : IAgent, IAsyncDisposable
         return handler;
     }
 
+    private AgentStreamingHandler BuildStreamingPipeline()
+    {
+        AgentStreamingHandler handler = (ctx, ct) => _model.StreamAsync(ctx.WorkingMessages as IReadOnlyList<ChatMessage> ?? ctx.WorkingMessages.ToList(), ct);
+
+        for (var i = _middlewares.Count - 1; i >= 0; i--)
+        {
+            var middleware = _middlewares[i];
+            var next = handler;
+            handler = (ctx, ct) => middleware.StreamAsync(ctx, next, ct);
+        }
+
+        return handler;
+    }
+
     private async Task<AgentResponse> RunToolLoopAsync(
         AgentContext context,
         AgentHandler handler,
@@ -192,18 +321,19 @@ public sealed class Agent : IAgent, IAsyncDisposable
         var response = await handler(context, cancellationToken);
         var toolCallDepth = 0;
         var seenToolCallSignatures = new HashSet<string>(StringComparer.Ordinal);
+        UsageInfo? aggregatedUsage = response.Usage;
 
         while (response.HasToolCalls)
         {
             if (toolCallDepth++ >= MaxToolCallDepth)
             {
-                return new AgentResponse(BuildToolLoopFallbackResponse(context));
+                return new AgentResponse(BuildToolLoopFallbackResponse(context), null, aggregatedUsage);
             }
 
             var signature = BuildToolCallSignature(response.ToolCalls!);
             if (!seenToolCallSignatures.Add(signature))
             {
-                return new AgentResponse(BuildToolLoopFallbackResponse(context));
+                return new AgentResponse(BuildToolLoopFallbackResponse(context), null, aggregatedUsage);
             }
 
             // Insert the assistant message that requested tool calls so the model
@@ -213,60 +343,92 @@ public sealed class Agent : IAgent, IAsyncDisposable
                 response.Content,
                 ToolCalls: response.ToolCalls));
 
-            foreach (var toolCall in response.ToolCalls!)
-            {
-                if (!_tools.TryGetValue(toolCall.Name, out var tool))
-                {
-                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"Error - Tool '{toolCall.Name}' is not registered.", toolCall.Name, toolCall.ToolCallId));
-                    continue;
-                }
-
-                // Bind structured parameters if the tool has them
-                var parameters = ParameterMetadataCache.GetOrAdd(tool.GetType(), static t => ToolParameterMetadata.ExtractFromTool(t));
-                if (parameters.Count > 0)
-                {
-                    try
-                    {
-                        ToolParameterBinder.BindParameters(tool, toolCall.Arguments, parameters);
-                    }
-                    catch (Exception ex)
-                    {
-                        context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"Error - {ex.Message}", toolCall.Name, toolCall.ToolCallId));
-                        continue;
-                    }
-                }
-
-                using var toolActivity = AgenticTelemetry.ActivitySource.StartActivity(AgenticTelemetry.Spans.ToolCall);
-                toolActivity?.SetTag(AgenticTelemetry.Tags.AgentToolName, toolCall.Name);
-                var toolSw = Stopwatch.StartNew();
-                try
-                {
-                    var toolResult = await tool.InvokeAsync(toolCall.Arguments, cancellationToken);
-                    toolSw.Stop();
-                    toolActivity?.SetTag(AgenticTelemetry.Tags.AgentToolSuccess, true);
-                    AgenticTelemetry.ToolCallCounter.Add(1, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.AgentToolName, toolCall.Name));
-                    AgenticTelemetry.ToolCallDuration.Record(toolSw.Elapsed.TotalMilliseconds, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.AgentToolName, toolCall.Name));
-                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, toolResult, toolCall.Name, toolCall.ToolCallId));
-                }
-                catch (Exception ex)
-                {
-                    toolSw.Stop();
-                    toolActivity?.SetTag(AgenticTelemetry.Tags.AgentToolSuccess, false);
-                    toolActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                    AgenticTelemetry.ToolCallCounter.Add(1, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.AgentToolName, toolCall.Name));
-                    AgenticTelemetry.ToolCallDuration.Record(toolSw.Elapsed.TotalMilliseconds, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.AgentToolName, toolCall.Name));
-                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"Error - {ex.Message}", toolCall.Name, toolCall.ToolCallId));
-                }
-            }
+            await ExecuteToolCallsAsync(context, response.ToolCalls!, cancellationToken);
 
             context.WorkingMessages.Add(new ChatMessage(
                 ChatRole.System,
                 "Use the latest tool results to answer the user. Only call another tool if additional information is strictly required."));
 
             response = await handler(context, cancellationToken);
+
+            // Accumulate token usage across loop iterations
+            if (response.Usage is not null)
+                aggregatedUsage = aggregatedUsage is not null ? aggregatedUsage + response.Usage : response.Usage;
         }
 
-        return response;
+        // Return final response with aggregated usage
+        return response with { Usage = aggregatedUsage };
+    }
+
+    /// <summary>
+    /// Continues the tool loop starting from an already-resolved initial tool-call response.
+    /// Used by <see cref="StreamAsync"/> after the first streaming pass produced tool calls.
+    /// </summary>
+    private async Task<AgentResponse> RunToolLoopFromToolCallsAsync(
+        AgentContext context,
+        AgentResponse initialResponse,
+        AgentHandler handler,
+        CancellationToken cancellationToken)
+    {
+        await ExecuteToolCallsAsync(context, initialResponse.ToolCalls!, cancellationToken);
+        context.WorkingMessages.Add(new ChatMessage(
+            ChatRole.System,
+            "Use the latest tool results to answer the user. Only call another tool if additional information is strictly required."));
+
+        // Let the normal tool loop handle any further chained tool calls
+        return await RunToolLoopAsync(context, handler, cancellationToken);
+    }
+
+    private async Task ExecuteToolCallsAsync(
+        AgentContext context,
+        IReadOnlyList<AgentToolCall> toolCalls,
+        CancellationToken cancellationToken)
+    {
+        foreach (var toolCall in toolCalls)
+        {
+            if (!_tools.TryGetValue(toolCall.Name, out var tool))
+            {
+                context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"Error - Tool '{toolCall.Name}' is not registered.", toolCall.Name, toolCall.ToolCallId));
+                continue;
+            }
+
+            // Bind structured parameters if the tool has them
+            var parameters = ParameterMetadataCache.GetOrAdd(tool.GetType(), static t => ToolParameterMetadata.ExtractFromTool(t));
+            if (parameters.Count > 0)
+            {
+                try
+                {
+                    ToolParameterBinder.BindParameters(tool, toolCall.Arguments, parameters);
+                }
+                catch (Exception ex)
+                {
+                    context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"Error - {ex.Message}", toolCall.Name, toolCall.ToolCallId));
+                    continue;
+                }
+            }
+
+            using var toolActivity = AgenticTelemetry.ActivitySource.StartActivity(AgenticTelemetry.Spans.ToolCall);
+            toolActivity?.SetTag(AgenticTelemetry.Tags.AgentToolName, toolCall.Name);
+            var toolSw = Stopwatch.StartNew();
+            try
+            {
+                var toolResult = await tool.InvokeAsync(toolCall.Arguments, cancellationToken);
+                toolSw.Stop();
+                toolActivity?.SetTag(AgenticTelemetry.Tags.AgentToolSuccess, true);
+                AgenticTelemetry.ToolCallCounter.Add(1, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.AgentToolName, toolCall.Name));
+                AgenticTelemetry.ToolCallDuration.Record(toolSw.Elapsed.TotalMilliseconds, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.AgentToolName, toolCall.Name));
+                context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, toolResult, toolCall.Name, toolCall.ToolCallId));
+            }
+            catch (Exception ex)
+            {
+                toolSw.Stop();
+                toolActivity?.SetTag(AgenticTelemetry.Tags.AgentToolSuccess, false);
+                toolActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                AgenticTelemetry.ToolCallCounter.Add(1, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.AgentToolName, toolCall.Name));
+                AgenticTelemetry.ToolCallDuration.Record(toolSw.Elapsed.TotalMilliseconds, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.AgentToolName, toolCall.Name));
+                context.WorkingMessages.Add(new ChatMessage(ChatRole.Tool, $"Error - {ex.Message}", toolCall.Name, toolCall.ToolCallId));
+            }
+        }
     }
 
     private async Task PersistToMemoryAsync(string input, string responseContent, CancellationToken cancellationToken)
@@ -331,7 +493,7 @@ public sealed class Agent : IAgent, IAsyncDisposable
         foreach (var tool in tools.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
         {
             lines.Add($"- {tool.Name}: {tool.Description}");
-            
+
             // Include parameter schema if the tool has structured parameters
             var parameters = ParameterMetadataCache.GetOrAdd(tool.GetType(), static t => ToolParameterMetadata.ExtractFromTool(t));
             if (parameters.Count > 0)

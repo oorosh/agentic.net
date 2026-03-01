@@ -225,6 +225,11 @@ public sealed class EmbeddingProviderTests
         {
             return Task.FromResult(new AgentResponse("echo"));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            System.Threading.CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 }
 

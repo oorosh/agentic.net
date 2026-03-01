@@ -349,6 +349,11 @@ public sealed class NewFeatureTests
             var last = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Content ?? "";
             return Task.FromResult(new AgentResponse($"echo: {last}"));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class StringArrayTool : ITool

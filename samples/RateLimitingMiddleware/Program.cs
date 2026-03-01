@@ -30,7 +30,7 @@ for (int i = 1; i <= 7; i++)
     {
         Console.WriteLine($"📝 Request {i}/7\n");
         var response = await agent.ReplyAsync($"Tell me something interesting number {i}.");
-        Console.WriteLine($"Response: {response[..Math.Min(80, response.Length)]}...\n");
+        { string r = response; Console.WriteLine($"Response: {r[..Math.Min(80, r.Length)]}...\n"); }
         Console.WriteLine(new string('─', 50) + "\n");
 
         if (i < 7)

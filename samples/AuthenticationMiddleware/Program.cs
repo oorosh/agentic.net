@@ -67,7 +67,7 @@ Console.WriteLine("Test 3: Valid API key and authorized user (alice)\n");
 try
 {
     var response3 = await agent.ReplyAsync("API_KEY:test-key-123 USER:alice What's the weather?");
-    Console.WriteLine($"Response: {response3[..Math.Min(100, response3.Length)]}...\n");
+    { string r = response3; Console.WriteLine($"Response: {r[..Math.Min(100, r.Length)]}...\n"); }
 }
 catch (Exception ex)
 {

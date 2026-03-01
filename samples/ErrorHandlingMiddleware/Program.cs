@@ -33,7 +33,7 @@ Console.WriteLine("Test 1: Normal Request\n");
 try
 {
     var response1 = await agent.ReplyAsync("What is 2+2?");
-    Console.WriteLine($"Response: {response1[..Math.Min(80, response1.Length)]}...\n");
+    { string r = response1; Console.WriteLine($"Response: {r[..Math.Min(80, r.Length)]}...\n"); }
 }
 catch (Exception ex)
 {
@@ -46,7 +46,7 @@ Console.WriteLine("Test 2: Another Question\n");
 try
 {
     var response2 = await agent.ReplyAsync("Tell me a short joke.");
-    Console.WriteLine($"Response: {response2[..Math.Min(80, response2.Length)]}...\n");
+    { string r = response2; Console.WriteLine($"Response: {r[..Math.Min(80, r.Length)]}...\n"); }
 }
 catch (Exception ex)
 {

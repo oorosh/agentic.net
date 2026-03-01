@@ -42,4 +42,14 @@ public sealed class EchoModel : IAgentModel
         var lastUserMessage = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Content ?? string.Empty;
         return Task.FromResult(new AgentResponse($"Echo: {lastUserMessage}"));
     }
+
+    public async IAsyncEnumerable<StreamingToken> StreamAsync(
+        IReadOnlyList<ChatMessage> messages,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var response = await CompleteAsync(messages, cancellationToken);
+        if (!string.IsNullOrEmpty(response.Content))
+            yield return new StreamingToken(response.Content, IsComplete: false);
+        yield return new StreamingToken(string.Empty, IsComplete: true);
+    }
 }

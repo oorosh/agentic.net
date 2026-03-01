@@ -74,6 +74,11 @@ public class ToolDiscoveryTests
         public Task<AgentResponse> CompleteAsync(
             IReadOnlyList<ChatMessage> messages, CancellationToken ct = default)
             => Task.FromResult(new AgentResponse("ok"));
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     // ── tests ─────────────────────────────────────────────────────────────────
@@ -223,6 +228,11 @@ public class ToolDiscoveryTests
             }
             return Task.FromResult(new AgentResponse("done"));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     /// <summary>Captures message content so tests can inspect injected context.</summary>
@@ -247,6 +257,11 @@ public class ToolDiscoveryTests
             }
             return Task.FromResult(new AgentResponse("ok"));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     // ── AgenticToolAttribute name/description override fixtures ───────────────

@@ -8,6 +8,7 @@ using Agentic.Builder;
 using Agentic.Core;
 using Agentic.Middleware;
 using Agentic.Tests.Fakes;
+using Agentic.Core;
 using Xunit;
 
 namespace Agentic.Tests;
@@ -344,6 +345,9 @@ public sealed class MiddlewareTests
             var lastUser = messages.Last(m => m.Role == ChatRole.User).Content;
             return Task.FromResult(new AgentResponse($"echo: {lastUser}"));
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+            => FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class NeverCalledModel : IAgentModel
@@ -352,6 +356,9 @@ public sealed class MiddlewareTests
         {
             throw new InvalidOperationException("Model should not be called");
         }
+
+        public IAsyncEnumerable<StreamingToken> StreamAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+            => FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
     private sealed class TrackingMemoryService : IMemoryService
