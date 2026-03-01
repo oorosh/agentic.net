@@ -13,16 +13,7 @@ if (string.IsNullOrWhiteSpace(apiKey))
 var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
 
 var assistant = new AgentBuilder()
-    .WithOpenAi(
-        apiKey,
-        model,
-        tools:
-        [
-            new OpenAiFunctionToolDefinition(
-                "get_weather",
-                "Get weather for a city.",
-                [new OpenAiFunctionToolParameter("city", "string", "City name")])
-        ])
+    .WithOpenAi(apiKey, model)
     .WithTool(new GetWeatherTool())
     .Build();
 
@@ -51,11 +42,14 @@ while (true)
 public sealed class GetWeatherTool : ITool
 {
     public string Name => "get_weather";
-    public string Description => "Returns a mocked weather report for a city.";
+    public string Description => "Get the current weather for a city.";
+
+    [ToolParameter(Description = "The name of the city", Required = true)]
+    public string City { get; set; } = "";
 
     public Task<string> InvokeAsync(string arguments, CancellationToken cancellationToken = default)
     {
-        var city = string.IsNullOrWhiteSpace(arguments) ? "Belgrade" : arguments;
+        var city = string.IsNullOrWhiteSpace(City) ? "Belgrade" : City;
         var report = $"{city}: 5°C, clear sky";
         return Task.FromResult(report);
     }

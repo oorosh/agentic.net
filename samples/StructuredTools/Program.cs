@@ -13,39 +13,7 @@ if (string.IsNullOrWhiteSpace(apiKey))
 var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
 
 var assistant = new AgentBuilder()
-    .WithOpenAi(
-        apiKey,
-        model,
-        tools:
-        [
-            new OpenAiFunctionToolDefinition(
-                "calculate",
-                "Performs mathematical calculations",
-                [
-                    new OpenAiFunctionToolParameter("operation", "string", "The operation to perform: add, subtract, multiply, divide"),
-                    new OpenAiFunctionToolParameter("a", "number", "First number"),
-                    new OpenAiFunctionToolParameter("b", "number", "Second number")
-                ]),
-            new OpenAiFunctionToolDefinition(
-                "search_hotels",
-                "Search for available hotels",
-                [
-                    new OpenAiFunctionToolParameter("city", "string", "City to search in"),
-                    new OpenAiFunctionToolParameter("check_in_date", "string", "Check-in date (YYYY-MM-DD)"),
-                    new OpenAiFunctionToolParameter("nights", "integer", "Number of nights"),
-                    new OpenAiFunctionToolParameter("max_price", "number", "Maximum price per night")
-                ]),
-            new OpenAiFunctionToolDefinition(
-                "book_hotel",
-                "Book a hotel room",
-                [
-                    new OpenAiFunctionToolParameter("hotel_id", "string", "Hotel ID"),
-                    new OpenAiFunctionToolParameter("check_in_date", "string", "Check-in date (YYYY-MM-DD)"),
-                    new OpenAiFunctionToolParameter("nights", "integer", "Number of nights"),
-                    new OpenAiFunctionToolParameter("guest_name", "string", "Guest name"),
-                    new OpenAiFunctionToolParameter("room_type", "string", "Room type: single, double, suite")
-                ])
-        ])
+    .WithOpenAi(apiKey, model)
     .WithTool(new CalculatorTool())
     .WithTool(new HotelSearchTool())
     .WithTool(new HotelBookingTool())

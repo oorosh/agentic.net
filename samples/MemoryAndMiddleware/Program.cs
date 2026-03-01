@@ -42,7 +42,7 @@ var builder = new AgentBuilder()
     .WithModelProvider(new DemoModelProvider())
     .WithMemory(new InMemoryMemoryService())
     .WithContextFactory(new DemoContextFactory())
-    .UseMiddleware(new ToneMiddleware());
+    .WithMiddleware(new ToneMiddleware());
 
 if (embeddingProvider != null)
 {

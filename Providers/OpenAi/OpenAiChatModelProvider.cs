@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Agentic.Abstractions;
 using Agentic.Core;
@@ -58,31 +59,61 @@ internal sealed class OpenAiChatModel : IAgentModel
         IReadOnlyList<ChatMessage> messages,
         CancellationToken cancellationToken = default)
     {
-        var payload = BuildPayload(messages);
+        using var activity = AgenticTelemetry.ActivitySource.StartActivity(AgenticTelemetry.Spans.LlmComplete);
+        activity?.SetTag(AgenticTelemetry.Tags.GenAiSystem, "openai");
+        activity?.SetTag(AgenticTelemetry.Tags.GenAiOperation, "chat");
+        activity?.SetTag(AgenticTelemetry.Tags.GenAiModel, _model);
 
-        using var content = new StringContent(JsonSerializer.Serialize(payload, PayloadSerializerOptions));
-        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        AgenticTelemetry.LlmCallCounter.Add(1, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.GenAiModel, _model));
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, ChatCompletionsUrl) { Content = content };
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+        try
+        {
+            var payload = BuildPayload(messages);
 
-        using var response = await SharedHttpClient.SendAsync(request, cancellationToken);
+            using var content = new StringContent(JsonSerializer.Serialize(payload, PayloadSerializerOptions));
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
 
-        response.EnsureSuccessStatusCode();
+            using var request = new HttpRequestMessage(HttpMethod.Post, ChatCompletionsUrl) { Content = content };
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            using var response = await SharedHttpClient.SendAsync(request, cancellationToken);
 
-        var message = json.RootElement
-            .GetProperty("choices")[0]
-            .GetProperty("message");
+            response.EnsureSuccessStatusCode();
 
-        var toolCalls = ParseToolCalls(message);
-        var text = message.TryGetProperty("content", out var contentElement) && contentElement.ValueKind != JsonValueKind.Null
-            ? contentElement.GetString() ?? string.Empty
-            : string.Empty;
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
 
-        return new AgentResponse(text, toolCalls);
+            // Parse token usage if present
+            if (json.RootElement.TryGetProperty("usage", out var usage))
+            {
+                if (usage.TryGetProperty("prompt_tokens", out var promptTokensEl) && promptTokensEl.TryGetInt64(out var promptTokens))
+                {
+                    activity?.SetTag(AgenticTelemetry.Tags.PromptTokens, promptTokens);
+                    AgenticTelemetry.PromptTokenCounter.Add(promptTokens, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.GenAiModel, _model));
+                }
+                if (usage.TryGetProperty("completion_tokens", out var completionTokensEl) && completionTokensEl.TryGetInt64(out var completionTokens))
+                {
+                    activity?.SetTag(AgenticTelemetry.Tags.CompletionTokens, completionTokens);
+                    AgenticTelemetry.CompletionTokenCounter.Add(completionTokens, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.GenAiModel, _model));
+                }
+            }
+
+            var message = json.RootElement
+                .GetProperty("choices")[0]
+                .GetProperty("message");
+
+            var toolCalls = ParseToolCalls(message);
+            var text = message.TryGetProperty("content", out var contentElement) && contentElement.ValueKind != JsonValueKind.Null
+                ? contentElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            return new AgentResponse(text, toolCalls);
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            throw;
+        }
     }
 
     private object BuildPayload(IReadOnlyList<ChatMessage> messages)
@@ -136,11 +167,30 @@ internal sealed class OpenAiChatModel : IAgentModel
     {
         if (message.Role == ChatRole.Tool)
         {
-            var toolName = message.ToolName ?? "unknown";
+            return new
+            {
+                role = "tool",
+                tool_call_id = message.ToolCallId ?? message.ToolName ?? "unknown",
+                content = message.Content
+            };
+        }
+
+        if (message.Role == ChatRole.Assistant && message.ToolCalls is { Count: > 0 })
+        {
             return new
             {
                 role = "assistant",
-                content = $"Tool '{toolName}' returned: {message.Content}. Use this result to answer the user."
+                content = string.IsNullOrEmpty(message.Content) ? (object?)null : message.Content,
+                tool_calls = message.ToolCalls.Select(tc => new
+                {
+                    id = tc.ToolCallId ?? tc.Name,
+                    type = "function",
+                    function = new
+                    {
+                        name = tc.Name,
+                        arguments = tc.Arguments
+                    }
+                }).ToArray()
             };
         }
 
@@ -173,6 +223,10 @@ internal sealed class OpenAiChatModel : IAgentModel
                 continue;
             }
 
+            var toolCallId = toolCall.TryGetProperty("id", out var idElement)
+                ? idElement.GetString()
+                : null;
+
             var name = functionElement.TryGetProperty("name", out var nameElement)
                 ? nameElement.GetString() ?? string.Empty
                 : string.Empty;
@@ -181,42 +235,9 @@ internal sealed class OpenAiChatModel : IAgentModel
                 ? argsElement.GetString() ?? "{}"
                 : "{}";
 
-            var arguments = TryExtractSingleStringArgument(argumentsJson) ?? argumentsJson;
-            calls.Add(new AgentToolCall(name, arguments));
+            calls.Add(new AgentToolCall(name, argumentsJson, toolCallId));
         }
 
         return calls.Count == 0 ? null : calls;
-    }
-
-    private static string? TryExtractSingleStringArgument(string argumentsJson)
-    {
-        try
-        {
-            using var argsDoc = JsonDocument.Parse(argumentsJson);
-            if (argsDoc.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                return null;
-            }
-
-            using var enumerator = argsDoc.RootElement.EnumerateObject();
-            if (!enumerator.MoveNext())
-            {
-                return null;
-            }
-
-            var first = enumerator.Current;
-            if (enumerator.MoveNext())
-            {
-                return null;
-            }
-
-            return first.Value.ValueKind == JsonValueKind.String
-                ? first.Value.GetString()
-                : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 }

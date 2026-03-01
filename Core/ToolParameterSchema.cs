@@ -32,7 +32,7 @@ public sealed class ToolParameterSchema
     /// </summary>
     public static ToolParameterSchema FromTool(ITool tool, IReadOnlyList<IToolParameterMetadata>? parameters = null)
     {
-        parameters ??= ToolParameterMetadata.ExtractFromTool(tool);
+        parameters ??= ToolParameterMetadata.ExtractFromTool(tool.GetType());
 
         var properties = new Dictionary<string, JsonElement>();
         var required = new List<string>();

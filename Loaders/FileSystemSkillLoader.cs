@@ -7,6 +7,8 @@ namespace Agentic.Loaders;
 
 public sealed class FileSystemSkillLoader : ISkillLoader
 {
+    private static readonly Regex FrontmatterRegex = new(@"^---\s*\n(.*?)\n---\s*\n(.*)$", RegexOptions.Singleline | RegexOptions.Compiled);
+
     private readonly string _skillsPath;
     private readonly Dictionary<string, Skill> _skills = new();
     private bool _loaded;
@@ -118,17 +120,12 @@ public sealed class FileSystemSkillLoader : ISkillLoader
 
     private static (string frontmatter, string body) ExtractFrontmatter(string content)
     {
-        var match = Regex.Match(content, @"^---\s*\n(.*?)\n---\s*\n(.*)$", RegexOptions.Singleline);
+        var match = FrontmatterRegex.Match(content);
         if (match.Success)
         {
             return (match.Groups[1].Value, match.Groups[2].Value);
         }
         return ("", content);
-    }
-
-    private static Dictionary<string, string>? ParseMetadata(string metadataYaml)
-    {
-        return null;
     }
 
     public static string ToPromptXml(IReadOnlyList<Skill> skills)
@@ -144,7 +141,7 @@ public sealed class FileSystemSkillLoader : ISkillLoader
             lines.Add("  <skill>");
             lines.Add($"    <name>{skill.Name}</name>");
             lines.Add($"    <description>{skill.Description}</description>");
-            lines.Add($"    <location>{skill.Path}</location>");
+            lines.Add($"    <location>{Path.GetFileName(skill.Path)}</location>");
             lines.Add("  </skill>");
         }
         lines.Add("</available_skills>");

@@ -44,7 +44,79 @@ var agent = new AgentBuilder()
     .Build();
 
 var reply = await agent.ReplyAsync("Hello");
-Console.WriteLine(reply);
+// reply.Content  → the response text (string)
+// reply          → implicit cast to string; Console.WriteLine(reply) works too
+Console.WriteLine(reply.Content);
+```
+
+## Tool calling
+
+Register tools so the model can invoke them during a conversation. Use `[ToolParameter]` to declare typed, validated parameters — the library auto-generates the JSON schema that the LLM receives, so it knows exactly what to pass.
+
+```csharp
+using Agentic.Abstractions;
+using Agentic.Builder;
+using Agentic.Core;
+using Agentic.Providers.OpenAi;
+
+// Define a tool with typed parameters
+public sealed class WeatherTool : ITool
+{
+    public string Name => "get_weather";
+    public string Description => "Returns the current weather for a given city.";
+
+    [ToolParameter("city", "City name to look up", required: true)]
+    public string City { get; set; } = string.Empty;
+
+    [ToolParameter("unit", "Temperature unit: 'celsius' or 'fahrenheit'")]
+    public string Unit { get; set; } = "celsius";
+
+    public Task<string> InvokeAsync(string arguments, CancellationToken cancellationToken = default)
+    {
+        // City and Unit are already populated by the framework before InvokeAsync is called.
+        return Task.FromResult($"Weather in {City}: 22°{(Unit == "celsius" ? "C" : "F")}, sunny.");
+    }
+}
+
+// Register with the builder — schema auto-generated, no manual JSON needed
+var agent = new AgentBuilder()
+    .WithOpenAi(apiKey)
+    .WithTool(new WeatherTool())
+    .Build();
+
+var reply = await agent.ReplyAsync("What's the weather in Paris?");
+Console.WriteLine(reply.Content);   // use .Content for the text; implicit string cast also works
+```
+
+### Auto-discovering tools
+
+Add `[AgenticTool]` to any `ITool` class and the builder will find and register it automatically — no manual `WithTool()` call needed.
+
+```csharp
+[AgenticTool]
+public sealed class WeatherTool : ITool { ... }
+
+[AgenticTool]
+public sealed class CalcTool : ITool { ... }
+
+var agent = new AgentBuilder()
+    .WithOpenAi(apiKey)
+    .WithToolsFromCallingAssembly()   // scans your assembly for [AgenticTool] classes
+    .Build();
+```
+
+Other overloads:
+
+```csharp
+.WithToolsFromAssembly<WeatherTool>()          // scan WeatherTool's assembly
+.WithToolsFromAssembly(Assembly.GetExecutingAssembly())  // explicit assembly
+```
+
+Manual `WithTool()` and auto-discovery can be freely mixed. The attribute also accepts optional `Name` and `Description` overrides if you want the LLM-facing values to differ from the `ITool` properties:
+
+```csharp
+[AgenticTool(Name = "get_weather_v2", Description = "Extended weather forecast.")]
+public sealed class WeatherToolV2 : ITool { ... }
 ```
 
 ## Custom model provider (optional)
@@ -81,7 +153,7 @@ public sealed class DemoModel : IAgentModel
 3. Optionally add memory with `WithMemory(...)`.
 4. Optionally add skills with `WithSkills()` or `WithSkills(path)`.
 5. Optionally add identity with `WithSoul()` or `WithSoul(path)`.
-6. Optionally add middleware with `UseMiddleware(...)`.
+6. Optionally add middleware with `WithMiddleware(...)`.
 7. Optionally register tools with `WithTool(...)`.
 8. Call `ReplyAsync(...)` from your app/service/controller.
 
@@ -98,6 +170,7 @@ public sealed class DemoModel : IAgentModel
 - `IPersistentSoulLoader`: extension for read-write SOUL implementations enabling personality learning.
 - `ITool`: executable function the model can request.
 - `ToolParameterAttribute`: attribute-based parameter definition enabling type-safe tool arguments with automatic validation and JSON schema generation.
+- `AgenticToolAttribute`: marks a tool class for automatic discovery via `WithToolsFromAssembly` / `WithToolsFromCallingAssembly`.
 
 If memory is configured, `MemoryMiddleware` is added automatically unless you add your own memory middleware.
 
@@ -283,6 +356,81 @@ OPENAI_API_KEY=your_key dotnet run --project samples/ResponseValidationMiddlewar
 
 **See:** [Response Validation Patterns Guide](docs/response-validation-patterns.md)
 
+## OpenTelemetry
+
+Agentic.NET emits distributed traces (spans) and metrics out of the box using the standard `System.Diagnostics.ActivitySource` and `System.Diagnostics.Metrics.Meter` APIs.
+No extra configuration is required inside the library — instrumentation is **zero-cost when no listener is registered**.
+
+### Wire up in your host
+
+```csharp
+using OpenTelemetry;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
+using Agentic.Core; // AgenticTelemetry
+
+var tracerProvider = Sdk.CreateTracerProviderBuilder()
+    .AddSource(AgenticTelemetry.ActivitySourceName)
+    .AddConsoleExporter()          // or AddOtlpExporter(), AddZipkinExporter(), etc.
+    .Build();
+
+var meterProvider = Sdk.CreateMeterProviderBuilder()
+    .AddMeter(AgenticTelemetry.MeterName)
+    .AddConsoleExporter()
+    .Build();
+```
+
+Or with ASP.NET Core / `IServiceCollection`:
+
+```csharp
+services.AddOpenTelemetry()
+    .WithTracing(b => b
+        .AddSource(AgenticTelemetry.ActivitySourceName)
+        .AddOtlpExporter())
+    .WithMetrics(b => b
+        .AddMeter(AgenticTelemetry.MeterName)
+        .AddOtlpExporter());
+```
+
+### Span hierarchy
+
+```
+agent.reply                          ← one per ReplyAsync call
+  └─ memory.retrieval                ← MemoryMiddleware (if configured)
+  └─ llm.complete                    ← first LLM call
+  └─ tool.call {agentic.tool.name}   ← per tool invocation (0..N)
+  └─ llm.complete                    ← subsequent LLM calls in the tool loop
+```
+
+### Span tags (Gen AI semantic conventions)
+
+| Tag | Span | Description |
+|---|---|---|
+| `gen_ai.system` | `llm.complete` | Always `openai` for the built-in provider |
+| `gen_ai.operation.name` | `llm.complete` | Always `chat` |
+| `gen_ai.request.model` | `llm.complete` | Model name (e.g. `gpt-4o-mini`) |
+| `gen_ai.usage.input_tokens` | `llm.complete` | Prompt token count |
+| `gen_ai.usage.output_tokens` | `llm.complete` | Completion token count |
+| `agentic.history.length` | `agent.reply` | Chat history length at call start |
+| `agentic.tool.name` | `tool.call` | Name of the invoked tool |
+| `agentic.tool.success` | `tool.call` | `true` / `false` |
+| `agentic.memory.mode` | `memory.retrieval` | `semantic` or `keyword` |
+| `agentic.memory.items` | `memory.retrieval` | Number of items returned |
+
+### Metrics
+
+| Metric | Type | Unit | Description |
+|---|---|---|---|
+| `agentic.reply.count` | Counter | `{reply}` | Total `ReplyAsync` completions |
+| `agentic.reply.duration` | Histogram | `ms` | End-to-end `ReplyAsync` latency |
+| `agentic.llm.call.count` | Counter | `{call}` | LLM `CompleteAsync` call count |
+| `agentic.llm.prompt_tokens` | Counter | `{token}` | Prompt tokens consumed |
+| `agentic.llm.completion_tokens` | Counter | `{token}` | Completion tokens generated |
+| `agentic.tool.call.count` | Counter | `{call}` | Tool invocation count |
+| `agentic.tool.call.duration` | Histogram | `ms` | Per-tool execution latency |
+| `agentic.memory.retrieval.count` | Counter | `{retrieval}` | Memory retrieval operations |
+| `agentic.memory.retrieval.items` | Histogram | `{item}` | Items returned per retrieval |
+
 ## Environment Variables
 
 Samples that use OpenAI require the following environment variables:
@@ -292,6 +440,20 @@ Samples that use OpenAI require the following environment variables:
 - `USE_EMBEDDINGS`: Set to `true` to enable semantic embeddings (optional)
 - `USE_PGVECTOR`: Set to `true` to use PostgreSQL pgvector (optional)
 - `PGVECTOR_CONNECTION_STRING`: PostgreSQL connection string (required when USE_PGVECTOR=true)
+
+## Namespace reference
+
+| What you need | `using` directive |
+|---|---|
+| `AgentBuilder` | `using Agentic.Builder;` |
+| `OpenAiModels` constants | `using Agentic.Providers.OpenAi;` |
+| `ITool`, `ToolParameterAttribute`, `IMemoryService` | `using Agentic.Abstractions;` |
+| `ChatMessage`, `ChatRole`, `AgentReply`, `SqliteMemoryService` | `using Agentic.Core;` |
+| `IAssistantMiddleware`, `AgentContext`, `AgentHandler` | `using Agentic.Middleware;` |
+| `InMemoryVectorStore`, `PgVectorStore` | `using Agentic.Stores;` |
+| `OpenAiEmbeddingProvider` | `using Agentic.Providers.OpenAi;` |
+
+Most applications only need `Agentic.Builder` and `Agentic.Providers.OpenAi`. Tools additionally need `Agentic.Abstractions` and `Agentic.Core`.
 
 ## Repository layout
 

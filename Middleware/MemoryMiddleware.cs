@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Agentic.Abstractions;
 using Agentic.Core;
 
@@ -17,17 +18,28 @@ public sealed class MemoryMiddleware(IMemoryService memoryService, IEmbeddingPro
         int topK = initial ? 100 : 5; // larger window on first turn
 
         IReadOnlyList<string> memories;
+        string mode;
+
+        using var activity = AgenticTelemetry.ActivitySource.StartActivity(AgenticTelemetry.Spans.MemoryRetrieval);
 
         if (!initial && embeddingProvider != null)
         {
+            mode = "semantic";
+            activity?.SetTag(AgenticTelemetry.Tags.AgentMemoryMode, mode);
             var queryEmbedding = await embeddingProvider.GenerateEmbeddingAsync(query, cancellationToken);
             var similar = await memoryService.RetrieveSimilarAsync(queryEmbedding, topK, cancellationToken);
             memories = similar.Select(x => x.Content).ToList();
         }
         else
         {
+            mode = "keyword";
+            activity?.SetTag(AgenticTelemetry.Tags.AgentMemoryMode, mode);
             memories = await memoryService.RetrieveRelevantAsync(query, topK, cancellationToken);
         }
+
+        activity?.SetTag(AgenticTelemetry.Tags.AgentMemoryItems, memories.Count);
+        AgenticTelemetry.MemoryRetrievalCounter.Add(1, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.AgentMemoryMode, mode));
+        AgenticTelemetry.MemoryRetrievalItems.Record(memories.Count, new KeyValuePair<string, object?>(AgenticTelemetry.Tags.AgentMemoryMode, mode));
 
         if (memories.Count > 0)
         {

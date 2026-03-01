@@ -10,7 +10,7 @@ public sealed class StructuredToolParametersTests
     public void ToolWithoutParameters_HasEmptyMetadata()
     {
         var tool = new SimpleStringTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         Assert.Empty(metadata);
     }
 
@@ -18,7 +18,7 @@ public sealed class StructuredToolParametersTests
     public void ToolWithParameters_ExtractsAllMetadata()
     {
         var tool = new WeatherTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         
         Assert.Equal(2, metadata.Count);
         Assert.NotNull(metadata.FirstOrDefault(m => m.Name == "City"));
@@ -29,7 +29,7 @@ public sealed class StructuredToolParametersTests
     public void ParameterMetadata_HasCorrectProperties()
     {
         var tool = new WeatherTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         
         var cityParam = metadata.First(m => m.Name == "City");
         Assert.Equal("City", cityParam.Name);
@@ -42,7 +42,7 @@ public sealed class StructuredToolParametersTests
     public void ParameterMetadata_WithEnum_ContainsEnumValues()
     {
         var tool = new WeatherTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         
         var unitsParam = metadata.First(m => m.Name == "Units");
         Assert.NotNull(unitsParam.Enum);
@@ -55,7 +55,7 @@ public sealed class StructuredToolParametersTests
     public void ParameterMetadata_WithDefault_ContainsDefaultValue()
     {
         var tool = new WeatherTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         
         var unitsParam = metadata.First(m => m.Name == "Units");
         Assert.Equal("C", unitsParam.DefaultValue);
@@ -80,7 +80,7 @@ public sealed class StructuredToolParametersTests
     public void BindParameters_WithValidJson_SetsProperties()
     {
         var tool = new WeatherTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         var arguments = """{"City": "London", "Units": "C"}""";
         
         ToolParameterBinder.BindParameters(tool, arguments, metadata);
@@ -93,7 +93,7 @@ public sealed class StructuredToolParametersTests
     public void BindParameters_WithMissingRequired_Throws()
     {
         var tool = new WeatherTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         var arguments = """{"Units": "C"}""";
         
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -106,7 +106,7 @@ public sealed class StructuredToolParametersTests
     public void BindParameters_WithInvalidEnum_Throws()
     {
         var tool = new WeatherTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         var arguments = """{"City": "London", "Units": "K"}""";
         
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -120,7 +120,7 @@ public sealed class StructuredToolParametersTests
     public void BindParameters_WithMissingOptional_AppliesDefault()
     {
         var tool = new WeatherTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         var arguments = """{"City": "London"}""";
         
         ToolParameterBinder.BindParameters(tool, arguments, metadata);
@@ -133,7 +133,7 @@ public sealed class StructuredToolParametersTests
     public void BindParameters_WithNumericParameter_ParsesCorrectly()
     {
         var tool = new NumericParamTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         var arguments = """{"Count": 42, "Temperature": 98.6}""";
         
         ToolParameterBinder.BindParameters(tool, arguments, metadata);
@@ -146,7 +146,7 @@ public sealed class StructuredToolParametersTests
     public void BindParameters_WithBooleanParameter_ParsesCorrectly()
     {
         var tool = new BooleanParamTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         var arguments = """{"Enabled": true}""";
         
         ToolParameterBinder.BindParameters(tool, arguments, metadata);
@@ -158,7 +158,7 @@ public sealed class StructuredToolParametersTests
     public void BindParameters_WithMinConstraint_ValidatesLowerBound()
     {
         var tool = new ConstrainedTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         var arguments = """{"Value": 5}""";
         
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -171,7 +171,7 @@ public sealed class StructuredToolParametersTests
     public void BindParameters_WithMaxConstraint_ValidatesUpperBound()
     {
         var tool = new ConstrainedTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         var arguments = """{"Value": 105}""";
         
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -184,7 +184,7 @@ public sealed class StructuredToolParametersTests
     public void BindParameters_WithinConstraints_Succeeds()
     {
         var tool = new ConstrainedTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         var arguments = """{"Value": 50}""";
         
         ToolParameterBinder.BindParameters(tool, arguments, metadata);
@@ -196,7 +196,7 @@ public sealed class StructuredToolParametersTests
     public void BindParameters_WithStringLengthConstraint_ValidatesLength()
     {
         var tool = new StringConstrainedTool();
-        var metadata = ToolParameterMetadata.ExtractFromTool(tool);
+        var metadata = ToolParameterMetadata.ExtractFromTool(tool.GetType());
         var arguments = """{"NameParam": "a"}""";
         
         var ex = Assert.Throws<InvalidOperationException>(() =>

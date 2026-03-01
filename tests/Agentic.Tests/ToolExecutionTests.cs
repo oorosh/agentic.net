@@ -31,7 +31,7 @@ public sealed class ToolExecutionTests
 
         var response = await agent.ReplyAsync("Please greet Alice");
 
-        Assert.Contains("Hello, Alice!", response);
+        Assert.Contains("Hello, Alice!", (string)response);
     }
 
     [Fact]

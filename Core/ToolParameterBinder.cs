@@ -42,8 +42,8 @@ public sealed class ToolParameterBinder
                 if (property is null)
                     continue;
 
-                // Try to get the value from JSON
-                var hasValue = root.TryGetProperty(param.Name, out var element);
+                // Try to get the value from JSON (case-insensitive to match LLM output)
+                var hasValue = TryGetPropertyIgnoreCase(root, param.Name, out var element);
 
                 if (!hasValue)
                 {
@@ -133,7 +133,10 @@ public sealed class ToolParameterBinder
 
             foreach (var item in element.EnumerateArray())
             {
-                list.Add(Convert.ChangeType(item.GetRawText(), elementType, CultureInfo.InvariantCulture));
+                var converted = elementType == typeof(string)
+                    ? (item.ValueKind == JsonValueKind.String ? item.GetString() : item.GetRawText())
+                    : Convert.ChangeType(item.GetRawText(), elementType, CultureInfo.InvariantCulture);
+                list.Add(converted);
             }
 
             if (targetType.IsArray)
@@ -232,5 +235,20 @@ public sealed class ToolParameterBinder
                     $"Parameter '{param.Name}' must have at most {param.MaxLength} items. Got: {collection.Count}");
             }
         }
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement obj, string name, out JsonElement value)
+    {
+        foreach (var property in obj.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 }

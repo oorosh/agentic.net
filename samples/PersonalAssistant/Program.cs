@@ -23,65 +23,52 @@ if (string.IsNullOrWhiteSpace(apiKey))
 }
 
 var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
-
-IEmbeddingProvider? embeddingProvider = null;
-IVectorStore? vectorStore = null;
 var useEmbeddings = Environment.GetEnvironmentVariable("USE_EMBEDDINGS")?.ToLower() == "true";
 var usePgVector = Environment.GetEnvironmentVariable("USE_PGVECTOR")?.ToLower() == "true";
 
+var builder = new AgentBuilder()
+    .WithOpenAi(apiKey, model: model)
+    .WithMemory(new SqliteMemoryService());
+
 if (useEmbeddings)
 {
-    embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
-    await embeddingProvider.InitializeAsync();
-
     if (usePgVector)
     {
+        // Production: pgvector for scalable semantic search
         var connString = Environment.GetEnvironmentVariable("PGVECTOR_CONNECTION_STRING");
-        if (!string.IsNullOrWhiteSpace(connString))
+        if (string.IsNullOrWhiteSpace(connString))
         {
-            vectorStore = new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
-            Console.WriteLine("(using pgvector for semantic memory)");
+            Console.WriteLine("Warning: USE_PGVECTOR=true but PGVECTOR_CONNECTION_STRING not set, falling back to in-memory vector store.");
         }
-        else
-        {
-            Console.WriteLine("Warning: USE_PGVECTOR=true but PGVECTOR_CONNECTION_STRING not set, falling back to in-memory");
-            vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
-        }
+
+        var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
+        await embeddingProvider.InitializeAsync();
+        var vectorStore = string.IsNullOrWhiteSpace(connString)
+            ? (Agentic.Abstractions.IVectorStore)new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions)
+            : new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
+
+        builder = builder
+            .WithMemory(new SqliteMemoryService(vectorStore))
+            .WithEmbeddingProvider(embeddingProvider)
+            .WithVectorStore(vectorStore);
+
+        Console.WriteLine(string.IsNullOrWhiteSpace(connString)
+            ? "(embeddings enabled with in-memory vector store)"
+            : "(embeddings enabled with pgvector)");
     }
     else
     {
-        vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+        // Development: in-memory vector store — single convenience call
+        builder = builder.WithSemanticMemory(apiKey);
+        Console.WriteLine("(embeddings enabled with in-memory vector store)");
     }
-}
-
-using var memoryService = vectorStore is not null 
-    ? new SqliteMemoryService(vectorStore) 
-    : new SqliteMemoryService();
-await memoryService.InitializeAsync();
-
-var restored = await memoryService.RetrieveRelevantAsync(string.Empty, topK: 100);
-if (restored.Count > 0)
-{
-    Console.WriteLine($"(loaded {restored.Count} items from memory)");
-}
-
-var builder = new AgentBuilder()
-    .WithOpenAi(apiKey, model: model)
-    .WithMemory(memoryService);
-
-if (embeddingProvider != null)
-{
-    builder = builder
-        .WithEmbeddingProvider(embeddingProvider)
-        .WithVectorStore(vectorStore!);
-    Console.WriteLine("(embeddings enabled for semantic memory)");
 }
 
 var assistant = builder.Build();
 
 Console.WriteLine("== OpenAI + SQLite Memory Sample ==" +
                   "\nType a prompt and press Enter. Type 'exit' to quit." +
-                  (embeddingProvider != null ? " (with embeddings)" : "") + "\n");
+                  (useEmbeddings ? " (with embeddings)" : "") + "\n");
 
 while (true)
 {
@@ -94,5 +81,5 @@ while (true)
         break;
 
     var reply = await assistant.ReplyAsync(input);
-    Console.WriteLine($"Assistant: {reply}\n");
+    Console.WriteLine($"Assistant: {reply.Content}\n");
 }

@@ -4,7 +4,7 @@ namespace Agentic.Core;
 
 public sealed class InMemoryMemoryService : IMemoryService
 {
-    private readonly List<(string Id, string Content)> _store = [];
+    private readonly Dictionary<string, string> _store = new();
     private readonly Dictionary<string, float[]> _embeddings = new();
     private bool _initialized;
 
@@ -18,7 +18,7 @@ public sealed class InMemoryMemoryService : IMemoryService
     {
         EnsureInitialized();
 
-        _store.Add((id, content));
+        _store[id] = content;
         return Task.CompletedTask;
     }
 
@@ -29,22 +29,21 @@ public sealed class InMemoryMemoryService : IMemoryService
         // If query is empty, return all messages in reverse order (most recent first)
         if (string.IsNullOrWhiteSpace(query))
         {
-            var allMessages = _store
-                .Reverse<(string Id, string Content)>()
+            var allMessages = _store.Values
+                .Reverse()
                 .Take(topK)
-                .Select(x => x.Content)
                 .ToList();
             return Task.FromResult<IReadOnlyList<string>>(allMessages);
         }
 
         var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        var matches = _store
-            .Reverse<(string Id, string Content)>()
-            .Select(item => new
+        var matches = _store.Values
+            .Reverse()
+            .Select(content => new
             {
-                item.Content,
-                Score = tokens.Count(token => item.Content.Contains(token, StringComparison.OrdinalIgnoreCase))
+                Content = content,
+                Score = tokens.Count(token => content.Contains(token, StringComparison.OrdinalIgnoreCase))
             })
             .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score)
@@ -67,16 +66,12 @@ public sealed class InMemoryMemoryService : IMemoryService
     {
         EnsureInitialized();
 
-        // Check if query is a zero vector
-        bool isZeroVector = queryEmbedding.All(x => x == 0f);
-
         var similarities = _store
-            .Where(item => _embeddings.ContainsKey(item.Id))
-            .Select(item => (
-                item.Content,
-                Score: VectorMath.CosineSimilarity(queryEmbedding, _embeddings[item.Id])
+            .Where(kvp => _embeddings.ContainsKey(kvp.Key))
+            .Select(kvp => (
+                Content: kvp.Value,
+                Score: VectorMath.CosineSimilarity(queryEmbedding, _embeddings[kvp.Key])
             ))
-            .Where(x => isZeroVector || x.Score >= 0.5f)
             .OrderByDescending(x => x.Score)
             .Take(topK)
             .ToList();
@@ -90,5 +85,23 @@ public sealed class InMemoryMemoryService : IMemoryService
         {
             throw new InvalidOperationException("Memory service not initialized. Call InitializeAsync first.");
         }
+    }
+
+    public Task DeleteMessageAsync(string id, CancellationToken cancellationToken = default)
+    {
+        EnsureInitialized();
+
+        _store.Remove(id);
+        _embeddings.Remove(id);
+        return Task.CompletedTask;
+    }
+
+    public Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        EnsureInitialized();
+
+        _store.Clear();
+        _embeddings.Clear();
+        return Task.CompletedTask;
     }
 }

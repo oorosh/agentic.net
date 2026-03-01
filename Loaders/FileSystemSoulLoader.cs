@@ -5,6 +5,8 @@ namespace Agentic.Loaders;
 
 public sealed class FileSystemSoulLoader : IPersistentSoulLoader
 {
+    private static readonly Regex SectionHeaderRegex = new(@"^#{2}\s+\w+", RegexOptions.Compiled);
+
     private readonly string _soulFilePath;
     private SoulDocument? _cached;
 
@@ -51,7 +53,7 @@ public sealed class FileSystemSoulLoader : IPersistentSoulLoader
             {
                 name = trimmed.TrimStart('#').Trim();
             }
-            else if (Regex.IsMatch(trimmed, @"^#{2}\s+\w+"))
+            else if (SectionHeaderRegex.IsMatch(trimmed))
             {
                 if (currentSection.Length > 0)
                 {

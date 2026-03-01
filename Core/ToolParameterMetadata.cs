@@ -47,12 +47,11 @@ public sealed class ToolParameterMetadata : IToolParameterMetadata
     public int? MaxLength { get; }
 
     /// <summary>
-    /// Extracts all tool parameters from a tool implementation using reflection.
+    /// Extracts all tool parameters from a tool type using reflection.
     /// </summary>
-    public static IReadOnlyList<IToolParameterMetadata> ExtractFromTool(object tool)
+    public static IReadOnlyList<IToolParameterMetadata> ExtractFromTool(Type type)
     {
         var parameters = new List<IToolParameterMetadata>();
-        var type = tool.GetType();
 
         var properties = type.GetProperties(
             BindingFlags.Public | BindingFlags.Instance);

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Agentic.Abstractions;
 using Agentic.Core;
 
@@ -5,7 +6,7 @@ namespace Agentic.Stores;
 
 public sealed class InMemoryVectorStore : IVectorStore
 {
-    private readonly Dictionary<string, float[]> _vectors = new();
+    private readonly ConcurrentDictionary<string, float[]> _vectors = new();
     private readonly int _dimensions;
     private bool _initialized;
 
@@ -53,7 +54,7 @@ public sealed class InMemoryVectorStore : IVectorStore
     public Task DeleteAsync(string id, CancellationToken cancellationToken = default)
     {
         if (!_initialized) throw new InvalidOperationException("Vector store not initialized.");
-        _vectors.Remove(id);
+        _vectors.TryRemove(id, out _);
         return Task.CompletedTask;
     }
 

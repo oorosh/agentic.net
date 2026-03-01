@@ -145,7 +145,7 @@ public class AgentBuilderTests
             .Build();
 
         var response = await assistant.ReplyAsync("question");
-        Assert.Contains("prior conversation", response);
+        Assert.Contains("prior conversation", (string)response);
     }
 
     private sealed class TestAgentModel : IAgentModel
@@ -211,6 +211,10 @@ public class AgentBuilderTests
             // return empty for test
             return Task.FromResult<IReadOnlyList<(string Content, float Score)>>(new List<(string, float)>());
         }
+
+        public Task DeleteMessageAsync(string id, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ClearAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     // simple integration test for the SQLite-based memory service in samples
@@ -285,7 +289,7 @@ public class AgentBuilderTests
                 .Build();
 
             var res = await assistant.ReplyAsync("hi");
-            Assert.Equal("ok", res);
+            Assert.Equal("ok", (string)res);
             Assert.NotNull(seen);
             Assert.Contains(seen!.WorkingMessages.Select(m => m.Content), c => c.Contains("remember this"));
         }
@@ -336,7 +340,7 @@ public class AgentBuilderTests
 
         var response = await assistant.ReplyAsync("please shout hello world");
 
-        Assert.Equal("Tool says: HELLO WORLD", response);
+        Assert.Equal("Tool says: HELLO WORLD", (string)response);
     }
 
     [Fact]
@@ -349,7 +353,7 @@ public class AgentBuilderTests
 
         var response = await assistant.ReplyAsync("please shout hello world");
 
-        Assert.Equal("HELLO WORLD", response);
+        Assert.Equal("HELLO WORLD", (string)response);
     }
 
     [Fact]
@@ -368,7 +372,7 @@ public class AgentBuilderTests
 
         var response = await assistant.ReplyAsync("hello");
 
-        Assert.Equal("ok", response);
+        Assert.Equal("ok", (string)response);
         Assert.NotNull(captured);
         var toolSystem = captured!.FirstOrDefault(m => m.Role == ChatRole.System && m.Content.Contains("Available tools:"));
         Assert.NotNull(toolSystem);
@@ -828,7 +832,7 @@ Then do this.");
         Assert.Contains("<available_skills>", xml);
         Assert.Contains("<name>pdf-processing</name>", xml);
         Assert.Contains("<description>Extract text from PDFs.</description>", xml);
-        Assert.Contains("<location>/skills/pdf</location>", xml);
+        Assert.Contains("<location>pdf</location>", xml);
         Assert.Contains("<name>data-analysis</name>", xml);
         Assert.Contains("</available_skills>", xml);
     }
@@ -1058,5 +1062,292 @@ You are a helpful assistant.");
         await assistant.InitializeAsync();
 
         Assert.Null(assistant.Soul);
+    }
+
+    [Fact]
+    public async Task Agent_auto_injects_soul_as_system_message()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var soulPath = Path.Combine(tempDir, "SOUL.md");
+            await File.WriteAllTextAsync(soulPath,
+                @"# TestBot
+## Role
+You are a helpful test bot.");
+
+            IReadOnlyList<ChatMessage>? captured = null;
+            var assistant = new AgentBuilder()
+                .WithModelProvider(new FakeModelProvider(new CaptureModel(messages =>
+                {
+                    captured = messages;
+                    return new AgentResponse("ok");
+                })))
+                .WithSoul(soulPath)
+                .Build();
+
+            await assistant.ReplyAsync("hello");
+
+            Assert.NotNull(captured);
+            var systemMsg = captured!.FirstOrDefault(m => m.Role == ChatRole.System && m.Content.Contains("helpful test bot"));
+            Assert.NotNull(systemMsg);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Agent_auto_injects_skills_as_system_message()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var skillDir = Path.Combine(tempDir, "my-skill");
+            Directory.CreateDirectory(skillDir);
+            await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
+                @"---
+name: my-skill
+description: Does something useful.
+---
+# Instructions
+Step 1.");
+
+            IReadOnlyList<ChatMessage>? captured = null;
+            var assistant = new AgentBuilder()
+                .WithModelProvider(new FakeModelProvider(new CaptureModel(messages =>
+                {
+                    captured = messages;
+                    return new AgentResponse("ok");
+                })))
+                .WithSkills(tempDir)
+                .Build();
+
+            await assistant.ReplyAsync("hello");
+
+            Assert.NotNull(captured);
+            var systemMsg = captured!.FirstOrDefault(m => m.Role == ChatRole.System && m.Content.Contains("my-skill"));
+            Assert.NotNull(systemMsg);
+            Assert.Contains("Does something useful", systemMsg!.Content);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Agent_soul_and_skills_injected_in_same_system_message()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+
+            var soulPath = Path.Combine(tempDir, "SOUL.md");
+            await File.WriteAllTextAsync(soulPath,
+                @"# ComboBot
+## Role
+You are a combo bot.");
+
+            var skillDir = Path.Combine(tempDir, "combo-skill");
+            Directory.CreateDirectory(skillDir);
+            await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
+                @"---
+name: combo-skill
+description: A combo skill.
+---
+# Instructions");
+
+            IReadOnlyList<ChatMessage>? captured = null;
+            var assistant = new AgentBuilder()
+                .WithModelProvider(new FakeModelProvider(new CaptureModel(messages =>
+                {
+                    captured = messages;
+                    return new AgentResponse("ok");
+                })))
+                .WithSoul(soulPath)
+                .WithSkills(tempDir)
+                .Build();
+
+            await assistant.ReplyAsync("hello");
+
+            Assert.NotNull(captured);
+            // Both soul and skills should appear in a single leading system message
+            var systemMessages = captured!.Where(m => m.Role == ChatRole.System).ToList();
+            var combined = systemMessages.FirstOrDefault(m =>
+                m.Content.Contains("combo bot") && m.Content.Contains("combo-skill"));
+            Assert.NotNull(combined);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task InMemoryVectorStore_concurrent_upserts_do_not_corrupt()
+    {
+        var store = new InMemoryVectorStore(dimensions: 3);
+        await store.InitializeAsync();
+
+        // Fire 50 concurrent upserts — would corrupt a plain Dictionary
+        var tasks = Enumerable.Range(0, 50).Select(i =>
+            store.UpsertAsync($"vec{i}", [i * 0.01f, 0f, 0f]));
+
+        await Task.WhenAll(tasks);
+
+        var results = await store.SearchAsync([0.5f, 0f, 0f], topK: 50);
+        Assert.Equal(50, results.Count);
+    }
+
+    [Fact]
+    public async Task WithSoulLearning_callback_fires_after_every_reply()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var soulPath = Path.Combine(tempDir, "SOUL.md");
+            await File.WriteAllTextAsync(soulPath,
+                @"# LearningBot
+## Role
+You are a learning bot.");
+
+            var callbackInputs = new List<string>();
+            var assistant = new AgentBuilder()
+                .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+                .WithSoul(soulPath)
+                .WithSoulLearning((userInput, agentReply, soul) =>
+                {
+                    callbackInputs.Add(userInput);
+                    return null; // no change
+                })
+                .Build();
+
+            await assistant.ReplyAsync("first message");
+            await assistant.ReplyAsync("second message");
+
+            Assert.Equal(2, callbackInputs.Count);
+            Assert.Equal("first message", callbackInputs[0]);
+            Assert.Equal("second message", callbackInputs[1]);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task WithSoulLearning_returning_null_does_not_change_soul()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var soulPath = Path.Combine(tempDir, "SOUL.md");
+            await File.WriteAllTextAsync(soulPath,
+                @"# StableBot
+## Role
+You are a stable bot.");
+
+            var assistant = new AgentBuilder()
+                .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+                .WithSoul(soulPath)
+                .WithSoulLearning((_, _, soul) => null)
+                .Build();
+
+            await assistant.InitializeAsync();
+            var originalRole = assistant.Soul!.Role;
+
+            await assistant.ReplyAsync("hello");
+
+            Assert.Equal(originalRole, assistant.Soul!.Role);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task WithSoulLearning_returning_new_soul_updates_agent_soul_and_system_message()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var soulPath = Path.Combine(tempDir, "SOUL.md");
+            await File.WriteAllTextAsync(soulPath,
+                @"# UpdateBot
+## Role
+Original role.");
+
+            IReadOnlyList<ChatMessage>? secondCallMessages = null;
+            var callCount = 0;
+
+            var assistant = new AgentBuilder()
+                .WithModelProvider(new FakeModelProvider(new CaptureModel(messages =>
+                {
+                    callCount++;
+                    if (callCount == 2)
+                        secondCallMessages = messages;
+                    return new AgentResponse("ok");
+                })))
+                .WithSoul(soulPath)
+                .WithSoulLearning((_, _, soul) =>
+                    soul with { Role = "Updated role after learning." })
+                .Build();
+
+            await assistant.ReplyAsync("first");
+            await assistant.ReplyAsync("second");
+
+            // Soul property should reflect updated role
+            Assert.Contains("Updated role after learning.", assistant.Soul!.Role);
+
+            // Second call's system message should contain the updated role
+            Assert.NotNull(secondCallMessages);
+            var sysMsg = secondCallMessages!.FirstOrDefault(m => m.Role == ChatRole.System && m.Content.Contains("Updated role after learning."));
+            Assert.NotNull(sysMsg);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task WithSoulLearning_persists_to_disk_when_persistent_loader_available()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var soulPath = Path.Combine(tempDir, "SOUL.md");
+            await File.WriteAllTextAsync(soulPath,
+                @"# PersistBot
+## Role
+Original role.");
+
+            var assistant = new AgentBuilder()
+                .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+                .WithSoul(soulPath)
+                .WithSoulLearning((_, _, soul) =>
+                    soul with { Role = "Persisted updated role." })
+                .Build();
+
+            await assistant.ReplyAsync("trigger learning");
+
+            // Re-read the file from disk to confirm persistence
+            var diskContent = await File.ReadAllTextAsync(soulPath);
+            Assert.Contains("Persisted updated role.", diskContent);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
     }
 }

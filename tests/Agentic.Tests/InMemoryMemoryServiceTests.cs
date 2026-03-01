@@ -145,7 +145,8 @@ public sealed class InMemoryMemoryServiceTests
         // Query similar to embedding 1
         var results = await service.RetrieveSimilarAsync(new float[] { 0.9f, 0.5f, 0.2f }, topK: 2);
         
-        Assert.Single(results);
+        // Both results returned (topK=2), best match is C# content
+        Assert.Equal(2, results.Count);
         Assert.Contains("C#", results[0].Content);
     }
 

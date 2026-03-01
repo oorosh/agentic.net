@@ -13,6 +13,7 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
 
     private readonly string _apiKey;
     private readonly string _model;
+    private readonly int? _overrideDimensions;
 
     /// <summary>
     /// Creates a new OpenAI embedding provider.
@@ -26,14 +27,34 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
     }
 
     /// <summary>
-    /// The dimensionality of the embeddings.
+    /// Creates a new OpenAI embedding provider with an explicit dimension count.
+    /// Use this overload for custom or fine-tuned models whose dimensions are not known at compile time.
     /// </summary>
+    /// <param name="apiKey">OpenAI API key.</param>
+    /// <param name="model">Embedding model name.</param>
+    /// <param name="dimensions">The number of dimensions the model produces.</param>
+    public OpenAiEmbeddingProvider(string apiKey, string model, int dimensions)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(model);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(dimensions);
+        _apiKey = apiKey;
+        _model = model;
+        _overrideDimensions = dimensions;
+    }
+
+    /// <summary>
+    /// The dimensionality of the embeddings produced by this model.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the model's dimensions are not known. Pass dimensions explicitly if using a custom model.</exception>
     public int Dimensions => _model switch
     {
         "text-embedding-ada-002" => 1536,
         "text-embedding-3-small" => 1536,
         "text-embedding-3-large" => 3072,
-        _ => 1536 // default
+        _ => _overrideDimensions ?? throw new InvalidOperationException(
+            $"Dimensions are not known for embedding model '{_model}'. " +
+            "Pass the dimensions explicitly via the constructor.")
     };
 
     /// <summary>

@@ -377,5 +377,9 @@ public sealed class MiddlewareTests
         {
             return Task.FromResult<IReadOnlyList<(string Content, float Score)>>(new List<(string, float)>());
         }
+
+        public Task DeleteMessageAsync(string id, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task ClearAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

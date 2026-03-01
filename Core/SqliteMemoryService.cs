@@ -11,6 +11,7 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
     private readonly string _connectionString;
     private readonly IVectorStore? _vectorStore;
     private SqliteConnection? _connection;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
     private bool _initialized;
 
     public SqliteMemoryService(string dbPath, IVectorStore? vectorStore = null)
@@ -28,34 +29,47 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        _connection = new SqliteConnection(_connectionString);
-        await _connection.OpenAsync(cancellationToken);
+        if (_initialized) return;
 
-        var cmd = _connection.CreateCommand();
-        cmd.CommandText = @"
-            CREATE TABLE IF NOT EXISTS memory (
-                id TEXT PRIMARY KEY,
-                content TEXT NOT NULL
-            );
-        ";
-        await cmd.ExecuteNonQueryAsync(cancellationToken);
-
+        await _initLock.WaitAsync(cancellationToken);
         try
         {
-            var alterCmd = _connection.CreateCommand();
-            alterCmd.CommandText = "ALTER TABLE memory ADD COLUMN embedding TEXT;";
-            await alterCmd.ExecuteNonQueryAsync(cancellationToken);
-        }
-        catch (SqliteException)
-        {
-        }
+            if (_initialized) return;
 
-        if (_vectorStore is not null)
-        {
-            await _vectorStore.InitializeAsync(cancellationToken);
-        }
+            _connection = new SqliteConnection(_connectionString);
+            await _connection.OpenAsync(cancellationToken);
 
-        _initialized = true;
+            var cmd = _connection.CreateCommand();
+            cmd.CommandText = @"
+                CREATE TABLE IF NOT EXISTS memory (
+                    id TEXT PRIMARY KEY,
+                    content TEXT NOT NULL
+                );
+            ";
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+            try
+            {
+                var alterCmd = _connection.CreateCommand();
+                alterCmd.CommandText = "ALTER TABLE memory ADD COLUMN embedding TEXT;";
+                await alterCmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+            catch (SqliteException ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
+            {
+                // Column already exists from a previous migration — safe to ignore.
+            }
+
+            if (_vectorStore is not null)
+            {
+                await _vectorStore.InitializeAsync(cancellationToken);
+            }
+
+            _initialized = true;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
     }
 
     public async Task StoreMessageAsync(string id, string content, CancellationToken cancellationToken = default)
@@ -165,7 +179,8 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
         }
 
         var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT content, embedding FROM memory WHERE embedding IS NOT NULL;";
+        // Load only the most recent rows to bound memory usage; cosine scoring is done in-process.
+        cmd.CommandText = "SELECT content, embedding FROM memory WHERE embedding IS NOT NULL ORDER BY rowid DESC LIMIT 1000;";
 
         var similarities = new List<(string Content, float Score)>();
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -192,6 +207,35 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
         }
     }
 
+    public async Task DeleteMessageAsync(string id, CancellationToken cancellationToken = default)
+    {
+        EnsureInitialized();
+
+        var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "DELETE FROM memory WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", id);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        if (_vectorStore is not null)
+        {
+            await _vectorStore.DeleteAsync(id, cancellationToken);
+        }
+    }
+
+    public async Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        EnsureInitialized();
+
+        var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "DELETE FROM memory;";
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        if (_vectorStore is not null)
+        {
+            await _vectorStore.DeleteAllAsync(cancellationToken);
+        }
+    }
+
     private async Task<string?> GetContentByIdAsync(string id, CancellationToken cancellationToken)
     {
         var cmd = _connection!.CreateCommand();
@@ -204,6 +248,7 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
     public void Dispose()
     {
         _connection?.Dispose();
+        _initLock.Dispose();
         if (_vectorStore is IDisposable disposable)
         {
             disposable.Dispose();
