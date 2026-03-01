@@ -42,7 +42,8 @@ public sealed class Agent : IAgent, IAsyncDisposable
         IReadOnlyDictionary<string, ITool> tools,
         ISkillLoader? skillLoader = null,
         ISoulLoader? soulLoader = null,
-        Func<string, string, SoulDocument, SoulDocument?>? soulLearningCallback = null)
+        Func<string, string, SoulDocument, SoulDocument?>? soulLearningCallback = null,
+        HeartbeatOptions? heartbeatOptions = null)
     {
         _model = model;
         _memoryService = memoryService;
@@ -53,6 +54,10 @@ public sealed class Agent : IAgent, IAsyncDisposable
         _skillLoader = skillLoader;
         _soulLoader = soulLoader;
         _soulLearningCallback = soulLearningCallback;
+        // Heartbeat service is constructed here so it can safely reference `this`.
+        Heartbeat = heartbeatOptions is not null
+            ? new AgentHeartbeatService(this, heartbeatOptions)
+            : null;
     }
 
     public IReadOnlyList<ChatMessage> History => _history;
@@ -60,6 +65,8 @@ public sealed class Agent : IAgent, IAsyncDisposable
     public IReadOnlyList<Skill>? Skills => _skills;
 
     public SoulDocument? Soul => _soul;
+
+    public IHeartbeatService? Heartbeat { get; }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -354,8 +361,23 @@ public sealed class Agent : IAgent, IAsyncDisposable
         return lastToolMessage.Content;
     }
 
+    /// <summary>
+    /// Removes the last user+assistant message pair from the conversation history.
+    /// Called by <see cref="AgentHeartbeatService"/> when the agent replies with the
+    /// silent token so that silent heartbeat exchanges don't pollute context.
+    /// </summary>
+    internal void PruneLastExchange()
+    {
+        // History is always written as [user, assistant] pairs — remove both.
+        if (_history.Count >= 2)
+            _history.RemoveRange(_history.Count - 2, 2);
+    }
+
     public async ValueTask DisposeAsync()
     {
+        if (Heartbeat is not null)
+            await Heartbeat.DisposeAsync();
+
         if (_memoryService is IAsyncDisposable asyncDisposableMemory)
             await asyncDisposableMemory.DisposeAsync();
         else if (_memoryService is IDisposable disposableMemory)

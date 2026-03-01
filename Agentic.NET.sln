@@ -31,6 +31,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ErrorHandlingMiddleware", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ResponseValidationMiddleware", "samples\ResponseValidationMiddleware\ResponseValidationMiddleware.csproj", "{7B5E8C4F-A2D9-4E1B-9F8E-C3D7E5A9B2F1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProactiveAssistant", "samples\ProactiveAssistant\ProactiveAssistant.csproj", "{C05BB0DD-7C17-45B7-AB97-F05786B71344}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -185,6 +187,18 @@ Global
 		{7B5E8C4F-A2D9-4E1B-9F8E-C3D7E5A9B2F1}.Release|x64.Build.0 = Release|Any CPU
 		{7B5E8C4F-A2D9-4E1B-9F8E-C3D7E5A9B2F1}.Release|x86.ActiveCfg = Release|Any CPU
 		{7B5E8C4F-A2D9-4E1B-9F8E-C3D7E5A9B2F1}.Release|x86.Build.0 = Release|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Debug|x64.Build.0 = Debug|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Debug|x86.Build.0 = Debug|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Release|x64.ActiveCfg = Release|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Release|x64.Build.0 = Release|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Release|x86.ActiveCfg = Release|Any CPU
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -201,6 +215,7 @@ Global
 		{6A6CF2BA-4B13-46CD-9B26-A64B697B0EAE} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{1EC222A0-EA16-4BC5-B25F-AA6C21F95595} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{7B5E8C4F-A2D9-4E1B-9F8E-C3D7E5A9B2F1} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
+		{C05BB0DD-7C17-45B7-AB97-F05786B71344} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {555466C2-0F47-48A0-BDAB-1F53F81C648F}

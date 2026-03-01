@@ -22,6 +22,7 @@ public sealed class AgentBuilder
     private ISkillLoader? _skillLoader;
     private ISoulLoader? _soulLoader;
     private Func<string, string, SoulDocument, SoulDocument?>? _soulLearningCallback;
+    private HeartbeatOptions? _heartbeatOptions;
     private readonly List<IAssistantMiddleware> _middlewares = [];
     private readonly List<ITool> _tools = [];
 
@@ -163,6 +164,44 @@ public sealed class AgentBuilder
     public AgentBuilder WithSoulLearning(Func<string, string, SoulDocument, SoulDocument?> callback)
     {
         _soulLearningCallback = callback;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables proactive heartbeat ticks using the default options (5-minute interval).
+    /// </summary>
+    public AgentBuilder WithHeartbeat()
+    {
+        _heartbeatOptions = new HeartbeatOptions();
+        return this;
+    }
+
+    /// <summary>
+    /// Enables proactive heartbeat ticks with the specified interval and optional custom prompt.
+    /// </summary>
+    public AgentBuilder WithHeartbeat(TimeSpan interval, string? prompt = null)
+    {
+        _heartbeatOptions = new HeartbeatOptions { Interval = interval, Prompt = prompt };
+        return this;
+    }
+
+    /// <summary>
+    /// Enables proactive heartbeat ticks with fully customisable options.
+    /// </summary>
+    public AgentBuilder WithHeartbeat(HeartbeatOptions options)
+    {
+        _heartbeatOptions = options ?? throw new ArgumentNullException(nameof(options));
+        return this;
+    }
+
+    /// <summary>
+    /// Enables proactive heartbeat ticks, configuring options via a callback.
+    /// </summary>
+    public AgentBuilder WithHeartbeat(Action<HeartbeatOptions> configure)
+    {
+        var options = new HeartbeatOptions();
+        configure(options);
+        _heartbeatOptions = options;
         return this;
     }
 
@@ -337,7 +376,8 @@ public sealed class AgentBuilder
             toolLookup,
             _skillLoader,
             _soulLoader,
-            _soulLearningCallback);
+            _soulLearningCallback,
+            _heartbeatOptions);
     }
 
     private IModelProvider ResolveModelProvider()

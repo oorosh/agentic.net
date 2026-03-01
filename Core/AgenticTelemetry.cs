@@ -97,6 +97,27 @@ public static class AgenticTelemetry
             unit: "{item}",
             description: "Number of memory items returned per retrieval.");
 
+    /// <summary>Total number of heartbeat ticks that reached the model.</summary>
+    internal static readonly Counter<long> HeartbeatCounter =
+        Meter.CreateCounter<long>(
+            "agentic.heartbeat.count",
+            unit: "{tick}",
+            description: "Number of heartbeat ticks that invoked the model.");
+
+    /// <summary>Wall-clock duration of a heartbeat tick in milliseconds.</summary>
+    internal static readonly Histogram<double> HeartbeatDuration =
+        Meter.CreateHistogram<double>(
+            "agentic.heartbeat.duration",
+            unit: "ms",
+            description: "Duration of a heartbeat tick from start to completion.");
+
+    /// <summary>Total number of heartbeat ticks that were skipped (labelled by reason).</summary>
+    internal static readonly Counter<long> HeartbeatSkipCounter =
+        Meter.CreateCounter<long>(
+            "agentic.heartbeat.skip.count",
+            unit: "{tick}",
+            description: "Number of heartbeat ticks that were skipped without invoking the model.");
+
     // ── Span / tag name constants (Gen AI semantic conventions) ─────────────
 
     // https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -116,6 +137,7 @@ public static class AgenticTelemetry
         public const string AgentHistoryLen   = "agentic.history.length";
         public const string AgentMemoryItems  = "agentic.memory.items";
         public const string AgentMemoryMode   = "agentic.memory.mode";   // "keyword" | "semantic"
+        public const string HeartbeatSkipReason = "agentic.heartbeat.skip_reason";
     }
 
     // ── Span name constants ───────────────────────────────────────────────────
@@ -126,6 +148,7 @@ public static class AgenticTelemetry
         public const string LlmComplete     = "llm.complete";
         public const string ToolCall        = "tool.call";
         public const string MemoryRetrieval = "memory.retrieval";
+        public const string Heartbeat       = "agent.heartbeat";
     }
 
     // ── Private helper ────────────────────────────────────────────────────────

@@ -23,6 +23,11 @@ public interface IAgent
     SoulDocument? Soul { get; }
 
     /// <summary>
+    /// The heartbeat service for this agent, or <see langword="null"/> if heartbeat was not configured.
+    /// </summary>
+    IHeartbeatService? Heartbeat { get; }
+
+    /// <summary>
     /// Initializes the agent, loading memory, embeddings, skills, and soul.
     /// Safe to call multiple times — initialization only happens once.
     /// </summary>
