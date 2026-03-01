@@ -7,19 +7,20 @@
 3. [Installation](#3-installation)
 4. [Core concepts](#4-core-concepts)
 5. [Quick start — minimal chat agent](#5-quick-start--minimal-chat-agent)
-6. [Memory — giving your agent a past](#6-memory--giving-your-agent-a-past)
-7. [Tools — letting the agent act](#7-tools--letting-the-agent-act)
-8. [Middleware — intercepting the pipeline](#8-middleware--intercepting-the-pipeline)
-9. [Agent identity with SOUL.md](#9-agent-identity-with-soulmd)
-10. [Agent skills](#10-agent-skills)
-11. [Semantic memory with embeddings](#11-semantic-memory-with-embeddings)
-12. [Custom model providers](#12-custom-model-providers)
-13. [OpenTelemetry observability](#13-opentelemetry-observability)
-14. [AgentBuilder reference](#14-agentbuilder-reference)
-15. [Namespace reference](#15-namespace-reference)
-16. [Environment variables](#16-environment-variables)
-17. [Common patterns and recipes](#17-common-patterns-and-recipes)
-18. [Troubleshooting](#18-troubleshooting)
+6. [Streaming](#6-streaming)
+7. [Memory — giving your agent a past](#7-memory--giving-your-agent-a-past)
+8. [Tools — letting the agent act](#8-tools--letting-the-agent-act)
+9. [Middleware — intercepting the pipeline](#9-middleware--intercepting-the-pipeline)
+10. [Agent identity with SOUL.md](#10-agent-identity-with-soulmd)
+11. [Agent skills](#11-agent-skills)
+12. [Semantic memory with embeddings](#12-semantic-memory-with-embeddings)
+13. [Custom model providers](#13-custom-model-providers)
+14. [OpenTelemetry observability](#14-opentelemetry-observability)
+15. [AgentBuilder reference](#15-agentbuilder-reference)
+16. [Namespace reference](#16-namespace-reference)
+17. [Environment variables](#17-environment-variables)
+18. [Common patterns and recipes](#18-common-patterns-and-recipes)
+19. [Troubleshooting](#19-troubleshooting)
 
 ---
 
@@ -88,6 +89,10 @@ The fluent configuration API. All library features are enabled through `With...`
 The return type of `ReplyAsync`. Contains:
 - `Content` — the response text as a `string`.
 - `UserMessage` / `AssistantMessage` — the `ChatMessage` objects that were added to history.
+- `Usage` — a `UsageInfo?` with `PromptTokens`, `CompletionTokens`, and `TotalTokens` (null if the provider doesn't report usage).
+- `FinishReason` — a `string?` such as `"stop"` or `"length"` (null if not reported).
+- `ModelId` — the model name echoed back by the provider (null if not reported).
+- `Duration` — the end-to-end wall-clock time for this reply turn as a `TimeSpan`.
 - Implicit cast to `string`, so `Console.WriteLine(reply)` works directly.
 
 ### IAgentModel / IModelProvider
@@ -138,7 +143,51 @@ Available model constants are in `Agentic.Providers.OpenAi.OpenAiModels`.
 
 ---
 
-## 6. Memory — giving your agent a past
+## 6. Streaming
+
+Instead of waiting for the full response, use `StreamAsync` to receive tokens as they are generated. This is ideal for chat UIs, progress indicators, or any scenario where perceived latency matters.
+
+### Basic usage
+
+```csharp
+await foreach (var token in agent.StreamAsync("Tell me a story"))
+{
+    if (!token.IsComplete)
+    {
+        Console.Write(token.Delta);   // print each chunk immediately
+    }
+    else
+    {
+        // The final sentinel token carries metadata
+        Console.WriteLine();
+        Console.WriteLine($"Finish reason : {token.FinishReason}");
+        Console.WriteLine($"Model         : {token.ModelId}");
+        Console.WriteLine($"Tokens used   : {token.FinalUsage?.TotalTokens}");
+    }
+}
+```
+
+### StreamingToken fields
+
+| Field | Description |
+|---|---|
+| `Delta` | The incremental text chunk for this token (empty string on the sentinel). |
+| `IsComplete` | `true` only on the final sentinel token — stop iterating after this. |
+| `FinalUsage` | `UsageInfo?` with `PromptTokens`, `CompletionTokens`, `TotalTokens` — only on the final token. |
+| `FinishReason` | `"stop"`, `"length"`, etc. — only on the final token. |
+| `ModelId` | Model name echoed back by the provider — only on the final token. |
+| `ToolCalls` | Populated when the model requested tool calls mid-stream (handled internally). |
+
+### Behaviour notes
+
+- History is updated and memory is persisted only **after** the stream is fully consumed (same semantics as `ReplyAsync`).
+- If the model requests tool calls mid-stream, the framework resolves them internally and then streams the final answer — callers see only text tokens.
+- Middleware participates via `IAssistantMiddleware.StreamAsync`. The default implementation transparently forwards all tokens, so existing middleware that only overrides `InvokeAsync` works without changes.
+- Cancellation is supported: pass a `CancellationToken` and the enumeration will stop cleanly.
+
+---
+
+## 7. Memory — giving your agent a past
 
 Without memory, the agent only knows what is in the current conversation window. Memory persists messages across sessions and injects relevant context automatically.
 
@@ -174,7 +223,7 @@ On the very first turn of a new session (empty history), all stored messages are
 
 ---
 
-## 7. Tools — letting the agent act
+## 8. Tools — letting the agent act
 
 Tools let the model do things: search the web, query a database, call an API, run a calculation. The model decides when to call a tool based on the conversation; you define what the tool does.
 
@@ -337,7 +386,7 @@ This loop repeats until the LLM returns a plain text response (no tool calls), o
 
 ---
 
-## 8. Middleware — intercepting the pipeline
+## 9. Middleware — intercepting the pipeline
 
 Middleware lets you run code before and/or after the LLM is called. Common uses: logging, caching, rate limiting, content moderation, authentication, and response validation.
 
@@ -404,7 +453,7 @@ public async Task<AgentResponse> InvokeAsync(
 
 ---
 
-## 9. Agent identity with SOUL.md
+## 10. Agent identity with SOUL.md
 
 SOUL.md gives your agent a name, role, personality, and rules that are automatically prepended to every conversation as a system prompt.
 
@@ -476,7 +525,7 @@ var agent = new AgentBuilder()
 
 ---
 
-## 10. Agent skills
+## 11. Agent skills
 
 Skills are capability bundles loaded from a directory. Each skill is a folder containing a `SKILL.md` file with YAML frontmatter and instructions.
 
@@ -527,7 +576,7 @@ After `InitializeAsync` (called automatically on first `ReplyAsync`), the skill 
 
 ---
 
-## 11. Semantic memory with embeddings
+## 12. Semantic memory with embeddings
 
 Keyword-based memory retrieval works well for exact matches. For fuzzy, meaning-based retrieval ("things the user said about their job" even if the exact word "job" wasn't used), add embeddings.
 
@@ -576,7 +625,7 @@ var agent = new AgentBuilder()
 
 ---
 
-## 12. Custom model providers
+## 13. Custom model providers
 
 If you want to use a model other than OpenAI (Anthropic, Azure OpenAI, a local Ollama instance, etc.), implement `IModelProvider` and `IAgentModel`:
 
@@ -607,6 +656,17 @@ public sealed class MyModel : IAgentModel
         // var toolCalls = new List<AgentToolCall> { new("tool_name", "{}", "call_id") };
         // return new AgentResponse(string.Empty, toolCalls);
     }
+
+    public async IAsyncEnumerable<StreamingToken> StreamAsync(
+        IReadOnlyList<ChatMessage> messages,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // Minimal implementation: delegate to CompleteAsync and emit a single token.
+        // Replace with real SSE/chunked streaming when your backend supports it.
+        var response = await CompleteAsync(messages, cancellationToken);
+        yield return new StreamingToken(response.Content);
+        yield return new StreamingToken(string.Empty, IsComplete: true);
+    }
 }
 
 // Register it
@@ -619,7 +679,7 @@ The `ChatMessage` type carries `Role` (`User`, `Assistant`, `System`, `Tool`), `
 
 ---
 
-## 13. OpenTelemetry observability
+## 14. OpenTelemetry observability
 
 Agentic.NET emits distributed traces and metrics with no configuration required inside the library. Instrumentation is zero-cost when no listener is attached.
 
@@ -688,7 +748,7 @@ agent.reply                          ← one span per ReplyAsync call
 
 ---
 
-## 14. AgentBuilder reference
+## 15. AgentBuilder reference
 
 Quick reference of every `AgentBuilder` method.
 
@@ -721,15 +781,15 @@ Quick reference of every `AgentBuilder` method.
 
 ---
 
-## 15. Namespace reference
+## 16. Namespace reference
 
 | Type(s) | `using` directive |
 |---|---|
 | `AgentBuilder` | `using Agentic.Builder;` |
 | `OpenAiModels`, `OpenAiEmbeddingProvider`, `OpenAiChatModelProvider` | `using Agentic.Providers.OpenAi;` |
 | `ITool`, `IMemoryService`, `IEmbeddingProvider`, `IModelProvider` | `using Agentic.Abstractions;` |
-| `ChatMessage`, `ChatRole`, `AgentReply`, `AgentResponse`, `SqliteMemoryService`, `AgenticTelemetry` | `using Agentic.Core;` |
-| `IAssistantMiddleware`, `AgentContext`, `AgentHandler`, `MemoryMiddleware` | `using Agentic.Middleware;` |
+| `ChatMessage`, `ChatRole`, `AgentReply`, `AgentResponse`, `UsageInfo`, `StreamingToken`, `SqliteMemoryService`, `AgenticTelemetry` | `using Agentic.Core;` |
+| `IAssistantMiddleware`, `AgentContext`, `AgentHandler`, `AgentStreamingHandler`, `MemoryMiddleware` | `using Agentic.Middleware;` |
 | `InMemoryVectorStore`, `PgVectorStore` | `using Agentic.Stores;` |
 | `SoulDocument`, `ISoulLoader`, `IPersistentSoulLoader` | `using Agentic.Abstractions;` |
 
@@ -737,7 +797,7 @@ Most applications only need `Agentic.Builder` and `Agentic.Providers.OpenAi`. To
 
 ---
 
-## 16. Environment variables
+## 17. Environment variables
 
 Used by the bundled samples and commonly adopted in application code:
 
@@ -751,7 +811,7 @@ Used by the bundled samples and commonly adopted in application code:
 
 ---
 
-## 17. Common patterns and recipes
+## 18. Common patterns and recipes
 
 ### Stateless single-turn helper (no history, no memory)
 
@@ -847,7 +907,7 @@ await using var agent = (IAsyncDisposable)new AgentBuilder()
 
 ---
 
-## 18. Troubleshooting
+## 19. Troubleshooting
 
 ### The agent does not remember anything between restarts
 

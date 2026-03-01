@@ -38,6 +38,7 @@ Console.WriteLine(reply);
 ## Key Features
 
 - **Pluggable Models**: Built-in OpenAI support or implement `IModelProvider` for other LLMs
+- **Streaming**: Receive tokens incrementally via `StreamAsync` with `IAsyncEnumerable<StreamingToken>`
 - **Memory**: SQLite, in-memory, or implement `IMemoryService` for custom storage
 - **Middleware**: Pre/post-process conversation with `IAssistantMiddleware`
 - **Tools**: Register executable functions the model can invoke

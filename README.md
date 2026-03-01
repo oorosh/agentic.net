@@ -45,10 +45,37 @@ var agent = new AgentBuilder()
     .Build();
 
 var reply = await agent.ReplyAsync("Hello");
-// reply.Content  → the response text (string)
-// reply          → implicit cast to string; Console.WriteLine(reply) works too
+// reply.Content      → the response text (string)
+// reply              → implicit cast to string; Console.WriteLine(reply) works too
+// reply.Usage        → UsageInfo(PromptTokens, CompletionTokens, TotalTokens) — nullable
+// reply.FinishReason → "stop", "length", etc. — nullable
+// reply.ModelId      → model name echoed back by the provider — nullable
+// reply.Duration     → end-to-end wall-clock time for this turn
 Console.WriteLine(reply.Content);
 ```
+
+## Streaming
+
+Stream tokens incrementally as the model generates them using `StreamAsync`. Each `StreamingToken` carries a `Delta` (the incremental text chunk) and a final sentinel with `IsComplete = true`.
+
+```csharp
+await foreach (var token in agent.StreamAsync("Tell me a story"))
+{
+    if (!token.IsComplete)
+    {
+        Console.Write(token.Delta);   // print each chunk as it arrives
+    }
+    else
+    {
+        // final token — metadata is populated here
+        Console.WriteLine();
+        Console.WriteLine($"Finish reason : {token.FinishReason}");
+        Console.WriteLine($"Tokens used   : {token.FinalUsage?.TotalTokens}");
+    }
+}
+```
+
+History is updated (and memory persisted) only after the stream is fully consumed — the same as `ReplyAsync`.
 
 ## Tool calling
 
@@ -143,6 +170,17 @@ public sealed class DemoModel : IAgentModel
         var lastUser = messages.Last(m => m.Role == ChatRole.User).Content;
         return Task.FromResult(new AgentResponse($"Echo: {lastUser}"));
     }
+
+    // Streaming — emit the full response as a single token, then the sentinel.
+    public async IAsyncEnumerable<StreamingToken> StreamAsync(
+        IReadOnlyList<ChatMessage> messages,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var response = await CompleteAsync(messages, cancellationToken);
+        yield return new StreamingToken(response.Content, IsComplete: false);
+        yield return new StreamingToken(Delta: string.Empty, IsComplete: true,
+            FinalUsage: response.Usage, FinishReason: response.FinishReason, ModelId: response.ModelId);
+    }
 }
 ```
 ## Heartbeat
@@ -187,13 +225,15 @@ Key options via `HeartbeatOptions`:
 6. Optionally add middleware with `WithMiddleware(...)`.
 7. Optionally register tools with `WithTool(...)`.
 8. Optionally enable proactive behavior with `WithHeartbeat(...)`.
-9. Call `ReplyAsync(...)` from your app/service/controller.
+9. Call `ReplyAsync(...)` for a full response, or `StreamAsync(...)` to iterate tokens as they arrive.
 
 ## Key concepts
 
 - `Agent`: runtime orchestrator for model, middleware, memory, skills, and tools.
 - `AgentContext`: current input + history + mutable working messages.
-- `IAssistantMiddleware`: pipeline steps around model execution (e.g., memory injection, content safeguards)
+- `AgentReply`: result of `ReplyAsync` — carries `Content` (text), `UserMessage`, `AssistantMessage`, `Usage` (token counts), `FinishReason`, `ModelId`, and `Duration`. Implicitly converts to `string`.
+- `StreamingToken`: a single chunk from `StreamAsync` — `Delta` (incremental text), `IsComplete` (sentinel flag), `FinalUsage`, `FinishReason`, `ModelId` on the last chunk.
+- `IAssistantMiddleware`: pipeline steps around model execution (e.g., memory injection, content safeguards); implement `StreamAsync` to participate in the streaming pipeline.
 - `IMemoryService`: store/retrieve memory for context injection.
 - `IEmbeddingProvider` (Vector Provider): generates embeddings for semantic memory search.
 - `IVectorStore`: pluggable vector storage (pgvector, in-memory, etc.).
@@ -500,8 +540,8 @@ Samples that use OpenAI require the following environment variables:
 | `AgentBuilder` | `using Agentic.Builder;` |
 | `OpenAiModels` constants | `using Agentic.Providers.OpenAi;` |
 | `ITool`, `ToolParameterAttribute`, `IMemoryService`, `IHeartbeatService` | `using Agentic.Abstractions;` |
-| `ChatMessage`, `ChatRole`, `AgentReply`, `SqliteMemoryService`, `HeartbeatOptions`, `HeartbeatResult`, `HeartbeatSkipReason` | `using Agentic.Core;` |
-| `IAssistantMiddleware`, `AgentContext`, `AgentHandler` | `using Agentic.Middleware;` |
+| `ChatMessage`, `ChatRole`, `AgentReply`, `AgentResponse`, `StreamingToken`, `UsageInfo`, `SqliteMemoryService`, `HeartbeatOptions`, `HeartbeatResult`, `HeartbeatSkipReason` | `using Agentic.Core;` |
+| `IAssistantMiddleware`, `AgentContext`, `AgentHandler`, `AgentStreamingHandler` | `using Agentic.Middleware;` |
 | `InMemoryVectorStore`, `PgVectorStore` | `using Agentic.Stores;` |
 | `OpenAiEmbeddingProvider` | `using Agentic.Providers.OpenAi;` |
 
