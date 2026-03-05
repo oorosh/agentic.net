@@ -72,8 +72,9 @@ If all retries fail, returns helpful fallback message.
 ## Usage
 
 ```csharp
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithMiddleware(new ResponseValidationMiddleware())
     .Build();
 
@@ -139,8 +140,9 @@ if (response.Length < 100 && context.Input.Contains("explain"))
 ### Combining with Other Middleware
 
 ```csharp
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithMiddleware(new RateLimitingMiddleware())     // Block bad users
     .WithMiddleware(new InputValidationMiddleware())  // Block bad inputs
     .WithMiddleware(new ErrorHandlingMiddleware())    // Retry transient errors

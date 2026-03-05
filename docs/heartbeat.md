@@ -8,7 +8,7 @@ The heartbeat feature gives an agent a proactive, scheduled pulse — it wakes u
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithHeartbeat(TimeSpan.FromMinutes(5), "Check HEARTBEAT.md and act on any pending tasks.")
     .Build();
 

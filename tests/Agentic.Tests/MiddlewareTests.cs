@@ -28,7 +28,7 @@ public sealed class MiddlewareTests
         var mw3 = new OrderRecordingMiddleware("mw3", calls);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .UseMiddleware(mw1)
             .UseMiddleware(mw2)
             .UseMiddleware(mw3)
@@ -54,7 +54,7 @@ public sealed class MiddlewareTests
         });
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .UseMiddleware(middleware)
             .Build();
 
@@ -72,7 +72,7 @@ public sealed class MiddlewareTests
         var mw2 = new TrackingMiddleware("second", executed);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .UseMiddleware(mw1)
             .UseMiddleware(mw2)
             .Build();
@@ -91,7 +91,7 @@ public sealed class MiddlewareTests
         var middleware = new InputCapturingMiddleware(captured);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .UseMiddleware(middleware)
             .Build();
 
@@ -112,7 +112,7 @@ public sealed class MiddlewareTests
         memory.StoredMessages.Add("remembered");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .WithMemory(memory)
             .UseMiddleware(middleware)
             .Build();
@@ -133,7 +133,7 @@ public sealed class MiddlewareTests
         var middleware = new ExceptionThrowingMiddleware();
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .UseMiddleware(middleware)
             .Build();
 
@@ -146,7 +146,7 @@ public sealed class MiddlewareTests
         var middleware = new ResponseShortCircuitMiddleware();
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new NeverCalledModel()))
+            .WithChatClient(new FakeChatClient(new NeverCalledModel()))
             .UseMiddleware(middleware)
             .Build();
 
@@ -164,7 +164,7 @@ public sealed class MiddlewareTests
         var mw2 = new OrderTrackingMiddleware("inner_enter", "inner_exit", order);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .UseMiddleware(mw1)
             .UseMiddleware(mw2)
             .Build();
@@ -186,7 +186,7 @@ public sealed class MiddlewareTests
         var middleware = new HistoryTrackingMiddleware(capturedHistoryCounts);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .UseMiddleware(middleware)
             .Build();
 
@@ -378,9 +378,9 @@ public sealed class MiddlewareTests
             return Task.FromResult<IReadOnlyList<string>>(StoredMessages);
         }
 
-        public Task StoreEmbeddingAsync(string id, float[] embedding, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task StoreEmbeddingAsync(string id, ReadOnlyMemory<float> embedding, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(float[] queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(ReadOnlyMemory<float> queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<(string Content, float Score)>>(new List<(string, float)>());
         }

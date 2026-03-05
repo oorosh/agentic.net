@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using Agentic.Abstractions;
-using Agentic.Core;
 
 namespace Agentic.Stores;
 
@@ -23,7 +22,7 @@ public sealed class InMemoryVectorStore : IVectorStore
         return Task.CompletedTask;
     }
 
-    public Task UpsertAsync(string id, float[] vector, CancellationToken cancellationToken = default)
+    public Task UpsertAsync(string id, ReadOnlyMemory<float> vector, CancellationToken cancellationToken = default)
     {
         if (!_initialized) throw new InvalidOperationException("Vector store not initialized.");
         if (vector.Length != _dimensions)
@@ -33,8 +32,8 @@ public sealed class InMemoryVectorStore : IVectorStore
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<(string Id, float[] Vector, float Score)>> SearchAsync(
-        float[] queryVector,
+    public Task<IReadOnlyList<(string Id, ReadOnlyMemory<float> Vector, float Score)>> SearchAsync(
+        ReadOnlyMemory<float> queryVector,
         int topK = 5,
         CancellationToken cancellationToken = default)
     {
@@ -43,12 +42,12 @@ public sealed class InMemoryVectorStore : IVectorStore
             throw new ArgumentException($"Query vector dimension must be {_dimensions}, got {queryVector.Length}.");
 
         var results = _vectors
-            .Select(kvp => (kvp.Key, kvp.Value, Score: VectorMath.CosineSimilarity(queryVector, kvp.Value)))
+            .Select(kvp => (kvp.Key, new ReadOnlyMemory<float>(kvp.Value), Score: CosineSimilarity(queryVector.Span, kvp.Value)))
             .OrderByDescending(x => x.Score)
             .Take(topK)
-            .ToList();
+            .ToList<(string Id, ReadOnlyMemory<float> Vector, float Score)>();
 
-        return Task.FromResult<IReadOnlyList<(string Id, float[] Vector, float Score)>>(results);
+        return Task.FromResult<IReadOnlyList<(string Id, ReadOnlyMemory<float> Vector, float Score)>>(results);
     }
 
     public Task DeleteAsync(string id, CancellationToken cancellationToken = default)
@@ -63,5 +62,18 @@ public sealed class InMemoryVectorStore : IVectorStore
         if (!_initialized) throw new InvalidOperationException("Vector store not initialized.");
         _vectors.Clear();
         return Task.CompletedTask;
+    }
+
+    private static float CosineSimilarity(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
+    {
+        float dot = 0, magA = 0, magB = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot  += a[i] * b[i];
+            magA += a[i] * a[i];
+            magB += b[i] * b[i];
+        }
+        float denom = MathF.Sqrt(magA) * MathF.Sqrt(magB);
+        return denom == 0f ? 0f : dot / denom;
     }
 }

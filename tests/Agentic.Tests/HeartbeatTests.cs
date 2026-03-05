@@ -19,7 +19,7 @@ public class HeartbeatTests
     public void Build_exposes_null_heartbeat_when_not_configured()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new StubAgentModel("ok")))
+            .WithChatClient(new FakeChatClient(new StubAgentModel("ok")))
             .Build();
 
         Assert.Null(agent.Heartbeat);
@@ -29,7 +29,7 @@ public class HeartbeatTests
     public void Build_exposes_heartbeat_service_when_configured()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new StubAgentModel("ok")))
+            .WithChatClient(new FakeChatClient(new StubAgentModel("ok")))
             .WithHeartbeat()
             .Build();
 
@@ -41,7 +41,7 @@ public class HeartbeatTests
     {
         var interval = TimeSpan.FromSeconds(30);
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new StubAgentModel("ok")))
+            .WithChatClient(new FakeChatClient(new StubAgentModel("ok")))
             .WithHeartbeat(interval)
             .Build();
 
@@ -58,7 +58,7 @@ public class HeartbeatTests
         };
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new StubAgentModel("ok")))
+            .WithChatClient(new FakeChatClient(new StubAgentModel("ok")))
             .WithHeartbeat(options)
             .Build();
 
@@ -69,7 +69,7 @@ public class HeartbeatTests
     public void Build_with_heartbeat_configure_callback_sets_service()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new StubAgentModel("ok")))
+            .WithChatClient(new FakeChatClient(new StubAgentModel("ok")))
             .WithHeartbeat(o => o.Interval = TimeSpan.FromMinutes(1))
             .Build();
 
@@ -392,7 +392,7 @@ public class HeartbeatTests
 
     private static IAgent BuildAgentWithModel(IAgentModel model) =>
         new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .Build();
 
     // ── Inner fakes ───────────────────────────────────────────────────────────

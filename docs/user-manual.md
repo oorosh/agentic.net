@@ -40,12 +40,12 @@ It is **not** a prompt-engineering framework and **not** a cloud service. It is 
 | Middleware pipeline | Insert logic before and after every LLM call |
 | Agent identity (SOUL.md) | Give the agent a name, role, personality, and rules |
 | Agent skills | Load capabilities from a standard `SKILL.md` directory |
-| Embeddings + vector stores | Semantic memory recall using OpenAI or any custom provider |
+| Embeddings + vector stores | Semantic memory recall using any MEAI `IEmbeddingGenerator<string, Embedding<float>>` |
 | OpenTelemetry | Distributed tracing and metrics with zero configuration |
 
 **What it does not do:**
 
-- It does not decide which LLM you use — the OpenAI provider is included, but any backend can be plugged in.
+- It does not decide which LLM you use — bring any `IChatClient` from `Microsoft.Extensions.AI`.
 - It does not manage API keys for you.
 - It does not require a cloud account, a server, or a database (all persistence is optional).
 
@@ -54,7 +54,7 @@ It is **not** a prompt-engineering framework and **not** a cloud service. It is 
 ## 2. Prerequisites
 
 - **.NET 8, 9, or 10** — the package targets all three.
-- An **OpenAI API key** if you want to use the built-in OpenAI provider. You can use a custom provider without one.
+- A **MEAI-compatible provider package** (e.g., `Microsoft.Extensions.AI.OpenAI`) and the corresponding API key/endpoint.
 - (Optional) **PostgreSQL with pgvector** for production-scale semantic memory.
 - (Optional) **SQLite** is bundled via `Microsoft.Data.Sqlite`; no separate install needed.
 
@@ -68,7 +68,13 @@ Add the NuGet package to your project:
 dotnet add package Agentic.NET
 ```
 
-That is the only package you need for basic usage. Additional packages like `OpenTelemetry.Exporter.OpenTelemetryProtocol` are only needed if you want to export traces/metrics.
+You also need a MEAI-compatible provider. For OpenAI:
+
+```bash
+dotnet add package Microsoft.Extensions.AI.OpenAI
+```
+
+For other providers (Azure OpenAI, Ollama, Anthropic, etc.) install the corresponding MEAI package. The library itself only depends on `Microsoft.Extensions.AI.Abstractions`.
 
 ---
 
@@ -95,9 +101,9 @@ The return type of `ReplyAsync`. Contains:
 - `Duration` — the end-to-end wall-clock time for this reply turn as a `TimeSpan`.
 - Implicit cast to `string`, so `Console.WriteLine(reply)` works directly.
 
-### IAgentModel / IModelProvider
+### IAgent / IChatClient
 
-`IAgentModel` is the thin abstraction over an LLM. `IModelProvider` is a factory for it. The built-in `OpenAiChatModelProvider` implements both for the OpenAI Chat Completions API.
+`IChatClient` (from `Microsoft.Extensions.AI`) is the LLM abstraction. You bring any MEAI-compatible implementation — OpenAI, Azure OpenAI, Ollama, or your own. `AgentBuilder.WithChatClient(chatClient)` is the single entry point to set it.
 
 ### AgentContext
 
@@ -111,15 +117,27 @@ An executable function the LLM can request. You implement the interface, annotat
 
 ## 5. Quick start — minimal chat agent
 
+Agentic.NET uses [Microsoft.Extensions.AI](https://learn.microsoft.com/en-us/dotnet/ai/microsoft-extensions-ai) (MEAI) for its model abstraction. You need a MEAI-compatible provider package in addition to `Agentic.NET`.
+
+For OpenAI:
+
+```bash
+dotnet add package Agentic.NET
+dotnet add package Microsoft.Extensions.AI.OpenAI
+```
+
 ```csharp
 using Agentic.Builder;
-using Agentic.Providers.OpenAi;
+using Microsoft.Extensions.AI;
+using OpenAI;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
     ?? throw new InvalidOperationException("Set OPENAI_API_KEY.");
 
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
+
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)        // uses gpt-4o-mini by default
+    .WithChatClient(chatClient)
     .Build();
 
 // Single turn
@@ -131,15 +149,22 @@ var reply2 = await agent.ReplyAsync("And what language do they speak there?");
 Console.WriteLine(reply2.Content);  // "French."
 ```
 
-To use a different model:
+To use a different model, change the model name string in `AsChatClient(...)`:
 
 ```csharp
-var agent = new AgentBuilder()
-    .WithOpenAi(apiKey, OpenAiModels.Gpt4o)
-    .Build();
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o");
 ```
 
-Available model constants are in `Agentic.Providers.OpenAi.OpenAiModels`.
+Other providers work identically — just swap the `IChatClient` implementation:
+
+```csharp
+// Azure OpenAI
+using Azure.AI.OpenAI;
+var chatClient = new AzureOpenAIClient(endpoint, credential).AsChatClient("gpt-4o");
+
+// Ollama (local model)
+var chatClient = new OllamaChatClient(new Uri("http://localhost:11434"), "llama3.2");
+```
 
 ---
 
@@ -195,7 +220,7 @@ Without memory, the agent only knows what is in the current conversation window.
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithInMemoryMemory()
     .Build();
 ```
@@ -204,7 +229,7 @@ var agent = new AgentBuilder()
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithMemory("memory.db")   // SQLite file path
     .Build();
 ```
@@ -266,7 +291,7 @@ Key points:
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithTool(new CalculatorTool())
     .WithTool(new WeatherTool())
     .Build();
@@ -300,19 +325,19 @@ public sealed class WeatherTool : ITool
 ```csharp
 // Scan the calling assembly — picks up all [AgenticTool] classes in your project.
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithToolsFromCallingAssembly()
     .Build();
 
 // Alternatively, scan a specific assembly by marker type.
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithToolsFromAssembly<WeatherTool>()   // scans WeatherTool's assembly
     .Build();
 
 // Or supply an Assembly instance directly.
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithToolsFromAssembly(Assembly.GetExecutingAssembly())
     .Build();
 ```
@@ -321,7 +346,7 @@ Auto-discovery and manual `WithTool()` calls can be freely mixed:
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithToolsFromCallingAssembly()   // auto-discover [AgenticTool] classes
     .WithTool(new RuntimeConfiguredTool(config))  // also add one manually
     .Build();
@@ -418,7 +443,7 @@ public sealed class LoggingMiddleware : IAssistantMiddleware
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithMiddleware(new LoggingMiddleware())
     .Build();
 ```
@@ -488,13 +513,13 @@ Save this file as `SOUL.md` alongside your application.
 ```csharp
 // Load from ./SOUL.md next to the executable
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithSoul()
     .Build();
 
 // Or specify a path
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithSoul("./config/SOUL.md")
     .Build();
 ```
@@ -505,7 +530,7 @@ You can update the agent's personality based on what it learns during a conversa
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithSoul("SOUL.md")
     .WithSoulLearning((userInput, agentReply, currentSoul) =>
     {
@@ -561,13 +586,13 @@ When the user asks about recent events or current data, use this skill to search
 ```csharp
 // Load from ./skills/ next to the executable
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithSkills()
     .Build();
 
 // Or specify a directory
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithSkills("./my-skills")
     .Build();
 ```
@@ -580,12 +605,26 @@ After `InitializeAsync` (called automatically on first `ReplyAsync`), the skill 
 
 Keyword-based memory retrieval works well for exact matches. For fuzzy, meaning-based retrieval ("things the user said about their job" even if the exact word "job" wasn't used), add embeddings.
 
-### Quick setup with OpenAI embeddings
+### Setup with OpenAI embeddings + in-memory vector store
 
 ```csharp
+using Microsoft.Extensions.AI;
+using OpenAI;
+using Agentic.Builder;
+using Agentic.Stores;
+
+var openAiClient = new OpenAIClient(apiKey);
+var chatClient = openAiClient.AsChatClient("gpt-4o-mini");
+var embeddingGenerator = openAiClient
+    .AsEmbeddingGenerator<string, Embedding<float>>("text-embedding-3-small");
+
+var vectorStore = new InMemoryVectorStore(dimensions: 1536);
+
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .WithSemanticMemory(apiKey)     // sets up OpenAI embeddings + in-memory vector store
+    .WithChatClient(chatClient)
+    .WithEmbeddingGenerator(embeddingGenerator)
+    .WithVectorStore(vectorStore)
+    .WithMemory("memory.db")
     .Build();
 ```
 
@@ -598,21 +637,24 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 ```csharp
-using Agentic.Providers.OpenAi;
+using Microsoft.Extensions.AI;
+using OpenAI;
 using Agentic.Stores;
 
-var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
-await embeddingProvider.InitializeAsync();    // fetches embedding dimensions from API
+var openAiClient = new OpenAIClient(apiKey);
+var chatClient = openAiClient.AsChatClient("gpt-4o-mini");
+var embeddingGenerator = openAiClient
+    .AsEmbeddingGenerator<string, Embedding<float>>("text-embedding-3-small");
 
 var vectorStore = new PgVectorStore(
     connectionString: "Host=localhost;Database=agentmemory;Username=postgres;Password=...",
-    dimensions: embeddingProvider.Dimensions);
+    dimensions: 1536);
 
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .WithMemory("memory.db", vectorStore)
-    .WithEmbeddingProvider(embeddingProvider)
+    .WithChatClient(chatClient)
+    .WithEmbeddingGenerator(embeddingGenerator)
     .WithVectorStore(vectorStore)
+    .WithMemory("memory.db", vectorStore)
     .Build();
 ```
 
@@ -625,57 +667,49 @@ var agent = new AgentBuilder()
 
 ---
 
-## 13. Custom model providers
+## 13. Custom chat clients
 
-If you want to use a model other than OpenAI (Anthropic, Azure OpenAI, a local Ollama instance, etc.), implement `IModelProvider` and `IAgentModel`:
+If you need a backend that does not yet have a MEAI provider package, implement `IChatClient` from `Microsoft.Extensions.AI` directly:
 
 ```csharp
-using Agentic.Abstractions;
-using Agentic.Core;
+using Microsoft.Extensions.AI;
 
-// The factory
-public sealed class MyModelProvider : IModelProvider
+public sealed class MyCustomChatClient : IChatClient
 {
-    public IAgentModel CreateModel() => new MyModel();
-}
+    public ChatClientMetadata Metadata => new("my-provider", null, null);
 
-// The model itself
-public sealed class MyModel : IAgentModel
-{
-    public async Task<AgentResponse> CompleteAsync(
-        IReadOnlyList<ChatMessage> messages,
+    public async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         // Build your request, call your backend, parse the response.
-        var lastUserMessage = messages.Last(m => m.Role == ChatRole.User).Content;
+        var lastUserMessage = messages.Last(m => m.Role == ChatRole.User).Text;
 
-        // Return AgentResponse with just text (no tool calls):
-        return new AgentResponse("Echo: " + lastUserMessage);
-
-        // Or with tool calls (if your backend supports function calling):
-        // var toolCalls = new List<AgentToolCall> { new("tool_name", "{}", "call_id") };
-        // return new AgentResponse(string.Empty, toolCalls);
+        return new ChatResponse(
+            [new ChatMessage(ChatRole.Assistant, "Echo: " + lastUserMessage)]);
     }
 
-    public async IAsyncEnumerable<StreamingToken> StreamAsync(
-        IReadOnlyList<ChatMessage> messages,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
-        // Minimal implementation: delegate to CompleteAsync and emit a single token.
-        // Replace with real SSE/chunked streaming when your backend supports it.
-        var response = await CompleteAsync(messages, cancellationToken);
-        yield return new StreamingToken(response.Content);
-        yield return new StreamingToken(string.Empty, IsComplete: true);
+        // Minimal: delegate to GetResponseAsync and emit as a single update.
+        throw new NotImplementedException("Implement streaming when needed.");
     }
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+    public void Dispose() { }
 }
 
 // Register it
 var agent = new AgentBuilder()
-    .WithModelProvider(new MyModelProvider())
+    .WithChatClient(new MyCustomChatClient())
     .Build();
 ```
 
-The `ChatMessage` type carries `Role` (`User`, `Assistant`, `System`, `Tool`), `Content`, and optional `ToolCalls` / `ToolName` / `ToolCallId` for tool-call messages.
+`Microsoft.Extensions.AI.ChatMessage` carries `Role` (`User`, `Assistant`, `System`, `Tool`), `Text`, and `Contents` (a list of `AIContent` items including `TextContent`, `FunctionCallContent`, and `FunctionResultContent` for tool-call messages).
 
 ---
 
@@ -754,28 +788,31 @@ Quick reference of every `AgentBuilder` method.
 
 | Method | What it does |
 |---|---|
-| `WithOpenAi(apiKey)` | Use OpenAI with the default model (`gpt-4o-mini`) |
-| `WithOpenAi(apiKey, model)` | Use OpenAI with a specific model |
-| `WithOpenAi(apiKey, options => ...)` | Use OpenAI with full `OpenAiProviderOptions` |
-| `WithModelProvider(provider)` | Use a custom `IModelProvider` |
+| `WithChatClient(IChatClient)` | Set the LLM backend — required; accepts any MEAI `IChatClient` |
+| `WithEmbeddingGenerator(IEmbeddingGenerator<string, Embedding<float>>)` | Enable semantic embeddings for memory search |
 | `WithMemory(dbPath)` | Persistent SQLite memory |
+| `WithMemory(dbPath, IVectorStore)` | Persistent SQLite memory with custom vector store |
 | `WithMemory(IMemoryService)` | Custom memory service |
 | `WithInMemoryMemory()` | Non-persistent in-memory storage |
-| `WithSemanticMemory(apiKey)` | OpenAI embeddings + in-memory vector store (one call) |
-| `WithEmbeddingProvider(provider)` | Custom embedding provider |
-| `WithOpenAiEmbeddings(apiKey)` | OpenAI text-embedding-3-small |
-| `WithVectorStore(store)` | Custom or `PgVectorStore` / `InMemoryVectorStore` |
+| `WithVectorStore(store)` | Attach a vector store (`PgVectorStore` / `InMemoryVectorStore`) |
 | `WithTool(tool)` | Register a single tool |
 | `WithTools(tools)` | Register multiple tools |
+| `WithToolsFromCallingAssembly()` | Auto-discover `[AgenticTool]` classes in calling assembly |
+| `WithToolsFromAssembly<TMarker>()` | Auto-discover in TMarker's assembly |
+| `WithToolsFromAssembly(Assembly)` | Auto-discover in a specific assembly |
 | `WithMiddleware(middleware)` | Add a middleware to the pipeline |
 | `WithMiddlewares(middlewares)` | Add multiple middlewares |
 | `WithSoul()` | Load `SOUL.md` from the app base directory |
-| `WithSoul(path)` | Load `SOUL.md` from a specific file path |
+| `WithSoul(path)` | Load `SOUL.md` from a specific file or directory |
 | `WithSoul(ISoulLoader)` | Custom soul loader |
 | `WithSoulLearning(callback)` | Enable dynamic personality updates |
 | `WithSkills()` | Load skills from `./skills/` in the app base directory |
 | `WithSkills(path)` | Load skills from a specific directory |
 | `WithSkills(ISkillLoader)` | Custom skill loader |
+| `WithHeartbeat()` | Enable proactive heartbeat with default options (5-minute interval) |
+| `WithHeartbeat(TimeSpan, string?)` | Enable heartbeat with custom interval and optional prompt |
+| `WithHeartbeat(HeartbeatOptions)` | Enable heartbeat with fully custom options |
+| `WithHeartbeat(Action<HeartbeatOptions>)` | Enable heartbeat configured via callback |
 | `WithContextFactory(factory)` | Custom `IAssistantContextFactory` |
 | `Build()` | Construct and return the `IAgent` |
 
@@ -786,14 +823,16 @@ Quick reference of every `AgentBuilder` method.
 | Type(s) | `using` directive |
 |---|---|
 | `AgentBuilder` | `using Agentic.Builder;` |
-| `OpenAiModels`, `OpenAiEmbeddingProvider`, `OpenAiChatModelProvider` | `using Agentic.Providers.OpenAi;` |
-| `ITool`, `IMemoryService`, `IEmbeddingProvider`, `IModelProvider` | `using Agentic.Abstractions;` |
-| `ChatMessage`, `ChatRole`, `AgentReply`, `AgentResponse`, `UsageInfo`, `StreamingToken`, `SqliteMemoryService`, `AgenticTelemetry` | `using Agentic.Core;` |
+| `ITool`, `ToolParameterAttribute`, `AgenticToolAttribute`, `IMemoryService`, `IHeartbeatService` | `using Agentic.Abstractions;` |
+| `ChatMessage`, `ChatRole`, `AgentReply`, `AgentResponse`, `UsageInfo`, `StreamingToken`, `SqliteMemoryService`, `AgenticTelemetry`, `HeartbeatOptions`, `HeartbeatResult` | `using Agentic.Core;` |
 | `IAssistantMiddleware`, `AgentContext`, `AgentHandler`, `AgentStreamingHandler`, `MemoryMiddleware` | `using Agentic.Middleware;` |
 | `InMemoryVectorStore`, `PgVectorStore` | `using Agentic.Stores;` |
 | `SoulDocument`, `ISoulLoader`, `IPersistentSoulLoader` | `using Agentic.Abstractions;` |
+| `IChatClient`, `IEmbeddingGenerator<,>`, `ChatMessage` (MEAI), `Embedding<float>`, `ChatRole` (MEAI) | `using Microsoft.Extensions.AI;` |
 
-Most applications only need `Agentic.Builder` and `Agentic.Providers.OpenAi`. Tools additionally need `Agentic.Abstractions` and `Agentic.Core`.
+> **Note:** `Microsoft.Extensions.AI.ChatMessage` and `Agentic.Core.ChatMessage` have the same name. Do **not** add `global using Microsoft.Extensions.AI;` — use explicit file-scoped `using` only where needed and qualify the Agentic type as `Agentic.Core.ChatMessage` in those files.
+
+Most applications only need `Agentic.Builder`, `Agentic.Core`, and `Microsoft.Extensions.AI` (plus the MEAI provider package). Tools additionally need `Agentic.Abstractions`.
 
 ---
 
@@ -816,8 +855,9 @@ Used by the bundled samples and commonly adopted in application code:
 ### Stateless single-turn helper (no history, no memory)
 
 ```csharp
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .Build();
 
 var reply = await agent.ReplyAsync("Summarise this: " + longText);
@@ -827,8 +867,9 @@ Console.WriteLine(reply.Content);
 ### Persistent agent (e.g. personal assistant)
 
 ```csharp
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithMemory("assistant.db")
     .WithSoul("SOUL.md")
     .Build();
@@ -846,8 +887,9 @@ while (true)
 ### Agent with tools and safeguards
 
 ```csharp
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithTool(new SearchTool())
     .WithTool(new CalculatorTool())
     .WithMiddleware(new ContentModerationMiddleware())
@@ -858,16 +900,18 @@ var agent = new AgentBuilder()
 ### Agent with full semantic memory stack
 
 ```csharp
-var embedding = new OpenAiEmbeddingProvider(apiKey);
-await embedding.InitializeAsync();
+var openAiClient = new OpenAIClient(apiKey);
+var chatClient = openAiClient.AsChatClient("gpt-4o");
+var embeddingGenerator = openAiClient
+    .AsEmbeddingGenerator<string, Embedding<float>>("text-embedding-3-small");
 
-var vector = new PgVectorStore(connectionString, embedding.Dimensions);
+var vector = new PgVectorStore(connectionString, dimensions: 1536);
 
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey, OpenAiModels.Gpt4o)
-    .WithMemory("memory.db", vector)
-    .WithEmbeddingProvider(embedding)
+    .WithChatClient(chatClient)
+    .WithEmbeddingGenerator(embeddingGenerator)
     .WithVectorStore(vector)
+    .WithMemory("memory.db", vector)
     .WithSoul("SOUL.md")
     .WithSkills("./skills")
     .Build();
@@ -877,14 +921,15 @@ var agent = new AgentBuilder()
 
 ```csharp
 // Program.cs
+builder.Services.AddSingleton<IChatClient>(_ =>
+    new OpenAIClient(builder.Configuration["OpenAI:ApiKey"]!)
+        .AsChatClient("gpt-4o-mini"));
+
 builder.Services.AddSingleton<IAgent>(sp =>
-{
-    var apiKey = builder.Configuration["OpenAI:ApiKey"]!;
-    return new AgentBuilder()
-        .WithOpenAi(apiKey)
+    new AgentBuilder()
+        .WithChatClient(sp.GetRequiredService<IChatClient>())
         .WithMemory("memory.db")
-        .Build();
-});
+        .Build());
 
 // Controller or minimal API
 app.MapPost("/chat", async (ChatRequest req, IAgent agent) =>
@@ -900,7 +945,7 @@ app.MapPost("/chat", async (ChatRequest req, IAgent agent) =>
 
 ```csharp
 await using var agent = (IAsyncDisposable)new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithMemory("memory.db")
     .Build();
 ```
@@ -919,9 +964,9 @@ Check that you are using `WithMemory("path/to/memory.db")` (SQLite, persistent) 
 2. Add `[ToolParameter]` attributes to all properties the model needs to fill in. Tools without parameters generate a warning in the trace output and an empty JSON schema — the model often ignores them.
 3. Check that the tool's `Name` uses only letters, digits, and underscores (`snake_case`).
 
-### `InvalidOperationException: A model provider is required`
+### `InvalidOperationException: A chat client is required`
 
-You must call `WithOpenAi(...)` or `WithModelProvider(...)` before calling `Build()`.
+You must call `WithChatClient(IChatClient)` before calling `Build()`.
 
 ### `InvalidOperationException: Tool 'x' is registered more than once`
 
@@ -929,7 +974,7 @@ Each tool name must be unique. Check that you are not calling `WithTool(new MyTo
 
 ### Memory retrieval returns unrelated results
 
-Switch from keyword to semantic retrieval by calling `WithSemanticMemory(apiKey)` or configuring `WithEmbeddingProvider` + `WithVectorStore`. Keyword search matches on overlapping tokens; semantic search matches on meaning.
+Switch from keyword to semantic retrieval by calling `WithEmbeddingGenerator(generator)` + `WithVectorStore(store)`. Keyword search matches on overlapping tokens; semantic search matches on meaning.
 
 ### The tool loop runs many rounds without finishing
 

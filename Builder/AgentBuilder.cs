@@ -3,20 +3,16 @@ using Agentic.Abstractions;
 using Agentic.Core;
 using Agentic.Loaders;
 using Agentic.Middleware;
-using Agentic.Providers.OpenAi;
+using Microsoft.Extensions.AI;
 
 namespace Agentic.Builder;
 
 public sealed class AgentBuilder
 {
-    private IModelProvider? _modelProvider;
-    // Deferred OpenAI config so tools can be auto-wired at Build() time
-    private string? _openAiApiKey;
-    private string? _openAiModel;
-    private OpenAiProviderOptions? _openAiOptions;
+    private IChatClient? _chatClient;
+    private IEmbeddingGenerator<string, Embedding<float>>? _embeddingGenerator;
 
     private IMemoryService? _memoryService;
-    private IEmbeddingProvider? _embeddingProvider;
     private IVectorStore? _vectorStore;
     private IAssistantContextFactory? _contextFactory;
     private ISkillLoader? _skillLoader;
@@ -26,34 +22,15 @@ public sealed class AgentBuilder
     private readonly List<IAssistantMiddleware> _middlewares = [];
     private readonly List<ITool> _tools = [];
 
-    public AgentBuilder WithModelProvider(IModelProvider modelProvider)
+    public AgentBuilder WithChatClient(IChatClient chatClient)
     {
-        _modelProvider = modelProvider;
-        _openAiApiKey = null;
-        _openAiModel = null;
-        _openAiOptions = null;
+        _chatClient = chatClient ?? throw new ArgumentNullException(nameof(chatClient));
         return this;
     }
 
-    public AgentBuilder WithOpenAi(string apiKey, string model = OpenAiModels.Gpt4oMini)
+    public AgentBuilder WithEmbeddingGenerator(IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator)
     {
-        _openAiApiKey = apiKey;
-        _openAiModel = model;
-        _openAiOptions = null;
-        _modelProvider = null;
-        return this;
-    }
-
-    public AgentBuilder WithOpenAi(
-        string apiKey,
-        Action<OpenAiProviderOptions> configure)
-    {
-        var options = new OpenAiProviderOptions();
-        configure(options);
-        _openAiApiKey = apiKey;
-        _openAiModel = options.Model;
-        _openAiOptions = options;
-        _modelProvider = null;
+        _embeddingGenerator = embeddingGenerator ?? throw new ArgumentNullException(nameof(embeddingGenerator));
         return this;
     }
 
@@ -70,7 +47,7 @@ public sealed class AgentBuilder
     }
 
     /// <summary>
-    /// Configures a simple in-memory memory service (no persistence — suitable for development/testing).
+    /// Configures a simple in-memory memory service (no persistence - suitable for development/testing).
     /// </summary>
     public AgentBuilder WithInMemoryMemory()
     {
@@ -81,35 +58,6 @@ public sealed class AgentBuilder
     public AgentBuilder WithVectorStore(IVectorStore vectorStore)
     {
         _vectorStore = vectorStore;
-        return this;
-    }
-
-    public AgentBuilder WithEmbeddingProvider(IEmbeddingProvider embeddingProvider)
-    {
-        _embeddingProvider = embeddingProvider;
-        return this;
-    }
-
-    /// <summary>
-    /// Convenience method to configure OpenAI embeddings using the default model (text-embedding-3-small).
-    /// </summary>
-    public AgentBuilder WithOpenAiEmbeddings(string apiKey, string model = "text-embedding-3-small")
-    {
-        _embeddingProvider = new OpenAiEmbeddingProvider(apiKey, model);
-        return this;
-    }
-
-    /// <summary>
-    /// Configures semantic memory with in-memory vector store using OpenAI embeddings.
-    /// Automatically sets up <see cref="InMemoryMemoryService"/>, <see cref="InMemoryVectorStore"/>,
-    /// and <see cref="OpenAiEmbeddingProvider"/> using the default text-embedding-3-small model.
-    /// </summary>
-    public AgentBuilder WithSemanticMemory(string openAiApiKey, string embeddingModel = "text-embedding-3-small")
-    {
-        _embeddingProvider = new OpenAiEmbeddingProvider(openAiApiKey, embeddingModel);
-        // Dimensions will be resolved when InitializeAsync is called on the provider.
-        // Use a lazy vector store that reads dimensions after initialization.
-        _memoryService = new InMemoryMemoryService();
         return this;
     }
 
@@ -236,12 +184,6 @@ public sealed class AgentBuilder
     /// <summary>
     /// Registers a tool the model can invoke during a conversation.
     /// </summary>
-    /// <remarks>
-    /// Decorate the tool's parameter properties with <see cref="Agentic.Abstractions.ToolParameterAttribute"/>
-    /// so the framework can auto-generate a JSON schema for the LLM. Tools without any
-    /// <c>[ToolParameter]</c> properties will emit a diagnostic warning at build time because the
-    /// LLM will receive an empty schema and may not call the tool correctly.
-    /// </remarks>
     public AgentBuilder WithTool(ITool tool)
     {
         _tools.Add(tool);
@@ -259,10 +201,6 @@ public sealed class AgentBuilder
     /// <see cref="ITool"/> and are decorated with <see cref="AgenticToolAttribute"/>, instantiates
     /// them using their public parameterless constructor, and registers each one as a tool.
     /// </summary>
-    /// <param name="assembly">The assembly to scan.</param>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when a discovered tool type does not have a public parameterless constructor.
-    /// </exception>
     public AgentBuilder WithToolsFromAssembly(Assembly assembly)
     {
         foreach (var type in DiscoverToolTypes(assembly))
@@ -278,7 +216,6 @@ public sealed class AgentBuilder
     /// classes that implement <see cref="ITool"/> and are decorated with <see cref="AgenticToolAttribute"/>,
     /// instantiates them, and registers each one as a tool.
     /// </summary>
-    /// <typeparam name="TMarker">Any type in the assembly you want to scan.</typeparam>
     public AgentBuilder WithToolsFromAssembly<TMarker>()
         => WithToolsFromAssembly(typeof(TMarker).Assembly);
 
@@ -291,28 +228,10 @@ public sealed class AgentBuilder
     public AgentBuilder WithToolsFromCallingAssembly()
         => WithToolsFromAssembly(Assembly.GetCallingAssembly());
 
-    /// <summary>
-    /// Returns the effective name for <paramref name="tool"/>, honouring any
-    /// <see cref="AgenticToolAttribute.Name"/> override declared on the tool's type.
-    /// Falls back to <see cref="ITool.Name"/> when the attribute is absent or its
-    /// <c>Name</c> property is <see langword="null"/> or whitespace.
-    /// </summary>
     private static string GetEffectiveToolName(ITool tool)
     {
         var attr = tool.GetType().GetCustomAttribute<AgenticToolAttribute>(inherit: false);
         return attr?.Name is { Length: > 0 } attrName ? attrName : tool.Name;
-    }
-
-    /// <summary>
-    /// Returns the effective description for <paramref name="tool"/>, honouring any
-    /// <see cref="AgenticToolAttribute.Description"/> override declared on the tool's type.
-    /// Falls back to <see cref="ITool.Description"/> when the attribute is absent or its
-    /// <c>Description</c> property is <see langword="null"/> or whitespace.
-    /// </summary>
-    private static string GetEffectiveToolDescription(ITool tool)
-    {
-        var attr = tool.GetType().GetCustomAttribute<AgenticToolAttribute>(inherit: false);
-        return attr?.Description is { Length: > 0 } attrDesc ? attrDesc : tool.Description;
     }
 
     private static IEnumerable<Type> DiscoverToolTypes(Assembly assembly)
@@ -341,9 +260,10 @@ public sealed class AgentBuilder
 
     public IAgent Build()
     {
-        // Resolve the model provider — either a custom one set via WithModelProvider,
-        // or auto-build an OpenAI provider with auto-wired tool definitions.
-        var modelProvider = ResolveModelProvider();
+        if (_chatClient is null)
+            throw new InvalidOperationException("A chat client is required. Call WithChatClient(IChatClient) first.");
+
+        var model = new ChatClientAgentModel(_chatClient);
 
         if (_memoryService is null && _vectorStore is not null)
         {
@@ -354,7 +274,7 @@ public sealed class AgentBuilder
 
         if (_memoryService is not null && pipeline.All(middleware => middleware is not MemoryMiddleware))
         {
-            pipeline.Insert(0, new MemoryMiddleware(_memoryService, _embeddingProvider));
+            pipeline.Insert(0, new MemoryMiddleware(_memoryService, _embeddingGenerator));
         }
 
         var toolLookup = new Dictionary<string, ITool>(StringComparer.OrdinalIgnoreCase);
@@ -368,9 +288,9 @@ public sealed class AgentBuilder
         }
 
         return new Agent(
-            modelProvider.CreateModel(),
+            model,
             _memoryService,
-            _embeddingProvider,
+            _embeddingGenerator,
             _contextFactory ?? new DefaultAssistantContextFactory(),
             pipeline,
             toolLookup,
@@ -378,69 +298,5 @@ public sealed class AgentBuilder
             _soulLoader,
             _soulLearningCallback,
             _heartbeatOptions);
-    }
-
-    private IModelProvider ResolveModelProvider()
-    {
-        // Custom provider wins — user is responsible for its tool definitions.
-        if (_modelProvider is not null)
-            return _modelProvider;
-
-        if (_openAiApiKey is null)
-            throw new InvalidOperationException("A model provider is required. Call WithOpenAi or WithModelProvider first.");
-
-        var model = _openAiModel ?? OpenAiModels.Gpt4oMini;
-
-        // Start from any explicitly configured tool definitions.
-        var explicitDefs = _openAiOptions?.Tools is { Count: > 0 }
-            ? new List<OpenAiFunctionToolDefinition>(_openAiOptions.Tools)
-            : new List<OpenAiFunctionToolDefinition>();
-
-        var explicitNames = new HashSet<string>(explicitDefs.Select(d => d.Name), StringComparer.OrdinalIgnoreCase);
-
-        // Auto-generate definitions for tools not already covered by explicit defs.
-        foreach (var tool in _tools)
-        {
-            var effectiveName = GetEffectiveToolName(tool);
-            var effectiveDescription = GetEffectiveToolDescription(tool);
-
-            if (explicitNames.Contains(effectiveName))
-                continue;
-
-            var parameters = ToolParameterMetadata.ExtractFromTool(tool.GetType());
-
-            if (parameters.Count == 0)
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"[Agentic] Tool '{effectiveName}' ({tool.GetType().Name}) has no [ToolParameter] properties. " +
-                    $"The LLM will receive an empty parameter schema and may not call the tool correctly. " +
-                    $"Add [ToolParameter] attributes to the tool's properties, or pass an explicit OpenAiFunctionToolDefinition via WithOpenAi(key, options => options.Tools = ...).");
-            }
-
-            var openAiParams = parameters
-                .Select(p => new OpenAiFunctionToolParameter(
-                    p.Name,
-                    MapToJsonType(p.ParameterType),
-                    p.Description,
-                    p.Required))
-                .ToList();
-
-            explicitDefs.Add(new OpenAiFunctionToolDefinition(effectiveName, effectiveDescription, openAiParams));
-        }
-
-        return new OpenAiChatModelProvider(_openAiApiKey, model, explicitDefs);
-    }
-
-    private static string MapToJsonType(Type type)
-    {
-        if (type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(byte))
-            return "integer";
-        if (type == typeof(float) || type == typeof(double) || type == typeof(decimal))
-            return "number";
-        if (type == typeof(bool))
-            return "boolean";
-        if (type.IsArray || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>)))
-            return "array";
-        return "string";
     }
 }

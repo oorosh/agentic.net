@@ -10,34 +10,25 @@
     <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/$(TargetFramework)/</IntermediateOutputPath>
     <IsPackable>true</IsPackable>
     <!-- use a prerelease version to keep the package in "preview" state -->
-    <Version>0.1.7-preview</Version>
+    <Version>0.2.0-preview</Version>
     <Authors>Uros Biberdzic</Authors>
     <Description>Create AI assistants in .NET with pluggable models, memory, middleware, and tools.</Description>
     <PackageProjectUrl>https://github.com/oorosh/agentic.net</PackageProjectUrl>
     <PackageTags>ai assistant llm tool-calling middleware memory soul identity learning structured-parameters validation</PackageTags>
-    <PackageReleaseNotes>v0.1.7-preview: Internal Refactoring &amp; Performance
-
-Improvements:
-- Static HttpClient shared across requests in OpenAI providers (avoids socket exhaustion)
-- JsonSerializerOptions cached as static readonly in OpenAiChatModel (avoids repeated allocation)
-- PropertyInfo lookups cached per (toolType, paramName) via ConcurrentDictionary in ToolParameterBinder
-- Regex patterns pre-compiled and cached via ConcurrentDictionary (avoids recompiling on every call)
-- Memory IDs now derived from SHA256(content + ticks) instead of Guid.NewGuid()
-- Removed redundant .AsEnumerable() calls in InMemoryMemoryService
-- Duplicate CosineSimilarity implementations consolidated into Core/VectorMath.cs
-- Role string mapping in ToOpenAiMessage uses a switch expression instead of ToString().ToLowerInvariant()
-- Agent.ReplyAsync() refactored into BuildPipeline(), RunToolLoopAsync(), PersistToMemoryAsync()
-- Tool catalog message lazily cached in Agent (_toolCatalogMessage ??= ...)
-- ToolParameterMetadata cached per tool type in Agent (ParameterMetadataCache)
-- EnsureInitialized() guard method extracted in InMemoryMemoryService and SqliteMemoryService
-- IVectorStore moved to Agentic.Abstractions namespace
-- Agent now implements IAsyncDisposable, disposing memory service and embedding provider on cleanup
-- FakeModelProvider extracted for test reuse; inner TestModelProvider classes removed from test files
-- OpenAiProviderOptions extracted to its own file
+    <PackageReleaseNotes>v0.2.0-preview: Microsoft.Extensions.AI Adoption
 
 Breaking Changes:
-- AgentBuilder.WithOpenAi(string, string, IReadOnlyList&lt;OpenAiFunctionToolDefinition&gt;?) overload removed; use the Action&lt;OpenAiProviderOptions&gt; overload to pass tools
-- IVectorStore namespace changed from Agentic.Stores to Agentic.Abstractions</PackageReleaseNotes>
+- Full adoption of Microsoft.Extensions.AI (MEAI) 10.3.0
+- IModelProvider removed; use AgentBuilder.WithChatClient(IChatClient) instead
+- IEmbeddingProvider removed; use AgentBuilder.WithEmbeddingGenerator(IEmbeddingGenerator) instead
+- WithOpenAi(), WithModelProvider(), WithEmbeddingProvider(), WithOpenAiEmbeddings(), WithSemanticMemory() removed from AgentBuilder
+- IMemoryService and IVectorStore now use ReadOnlyMemory&lt;float&gt; instead of float[] for embeddings
+- Built-in OpenAI provider (Providers/OpenAi/) removed; install Microsoft.Extensions.AI.OpenAI and pass IChatClient directly
+
+Improvements:
+- Core library is now zero-provider: accepts any IChatClient and IEmbeddingGenerator
+- MEAI middleware pipeline fully composable around IChatClient (logging, caching, OTel, retry)
+- IAssistantMiddleware still works for turn-level middleware (memory injection, filtering, audit)</PackageReleaseNotes>
     <Copyright>Copyright (c) Uros Biberdzic 2026</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.pkg.md</PackageReadmeFile>
@@ -57,6 +48,8 @@ Breaking Changes:
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.3.0" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.3.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
     <PackageReference Include="Npgsql" Version="8.0.5" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.11.2" />

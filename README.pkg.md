@@ -15,18 +15,24 @@ dotnet add package Agentic.NET
 
 ## Quick example
 
+Agentic.NET is built on [Microsoft.Extensions.AI](https://learn.microsoft.com/en-us/dotnet/ai/microsoft-extensions-ai) (MEAI). You need a MEAI-compatible provider package alongside this one:
+
+```bash
+dotnet add package Microsoft.Extensions.AI.OpenAI
+```
+
 ```csharp
 using Agentic.Builder;
-using Agentic.Core;
-using Agentic.Providers.OpenAi;
+using Microsoft.Extensions.AI;
+using OpenAI;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
     ?? throw new InvalidOperationException("Set OPENAI_API_KEY first.");
-var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
 
-// configure built-in OpenAI provider directly in the pipeline
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
+
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey, model: model)
+    .WithChatClient(chatClient)
     .Build();
 
 var reply = await agent.ReplyAsync("What's up?");
@@ -37,9 +43,10 @@ Console.WriteLine(reply);
 
 ## Key Features
 
-- **Pluggable Models**: Built-in OpenAI support or implement `IModelProvider` for other LLMs
+- **Provider-agnostic**: Works with any `IChatClient` from Microsoft.Extensions.AI (OpenAI, Azure, Ollama, custom)
 - **Streaming**: Receive tokens incrementally via `StreamAsync` with `IAsyncEnumerable<StreamingToken>`
 - **Memory**: SQLite, in-memory, or implement `IMemoryService` for custom storage
+- **Semantic memory**: Bring any `IEmbeddingGenerator<string, Embedding<float>>` for vector-based recall
 - **Middleware**: Pre/post-process conversation with `IAssistantMiddleware`
 - **Tools**: Register executable functions the model can invoke
 - **Skills**: Load capabilities from Agent Skills format

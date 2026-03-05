@@ -47,7 +47,7 @@ Assistant: This contains [censored] content.
 
 ```csharp
 var assistant = new AgentBuilder()
-    .WithModelProvider(new DemoModelProvider())
+    .WithChatClient(new DemoChatClient())
     .WithMiddleware(new PromptGuardMiddleware())    // Pre-LLM validation
     .WithMiddleware(new ResponseGuardMiddleware())  // Post-LLM filtering
     .Build();

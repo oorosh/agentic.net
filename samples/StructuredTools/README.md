@@ -125,7 +125,7 @@ public sealed class MyTool : ITool
 
 ```csharp
 var assistant = new AgentBuilder()
-    .WithOpenAi(apiKey, model)
+    .WithChatClient(new OpenAIClient(apiKey).AsChatClient(model))
     .WithTool(new MyTool())
     .Build();
 ```

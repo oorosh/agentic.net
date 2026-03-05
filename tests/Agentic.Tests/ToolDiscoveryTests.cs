@@ -91,7 +91,7 @@ public class ToolDiscoveryTests
     public void WithTool_registered_marked_tool_builds_successfully()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(EchoModel))
+            .WithChatClient(new FakeChatClient(EchoModel))
             .WithTool(new MarkedTool())
             .WithTool(new AnotherMarkedTool())
             .Build();
@@ -107,7 +107,7 @@ public class ToolDiscoveryTests
     public void WithToolsFromAssembly_with_empty_assembly_succeeds()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(EchoModel))
+            .WithChatClient(new FakeChatClient(EchoModel))
             .WithToolsFromAssembly(typeof(AgentBuilder).Assembly)
             .Build();
 
@@ -123,7 +123,7 @@ public class ToolDiscoveryTests
     {
         // AgentBuilder is in the main library assembly which has no [AgenticTool] classes.
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(EchoModel))
+            .WithChatClient(new FakeChatClient(EchoModel))
             .WithToolsFromAssembly<AgentBuilder>()
             .Build();
 
@@ -137,7 +137,7 @@ public class ToolDiscoveryTests
     public void WithToolsFromAssembly_can_combine_with_explicit_WithTool()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(EchoModel))
+            .WithChatClient(new FakeChatClient(EchoModel))
             .WithToolsFromAssembly(typeof(AgentBuilder).Assembly) // zero [AgenticTool] types
             .WithTool(new MarkedTool())
             .Build();
@@ -155,7 +155,7 @@ public class ToolDiscoveryTests
         var model = new ToolRequestingModel("marked_tool", "{}", "call-1");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .WithTool(new MarkedTool())
             .Build();
 
@@ -177,7 +177,7 @@ public class ToolDiscoveryTests
 
         // Scan main library (no [AgenticTool] types) + add an unmarked tool manually.
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .WithToolsFromAssembly(typeof(AgentBuilder).Assembly)
             .WithTool(new UnmarkedTool())
             .Build();
@@ -204,7 +204,7 @@ public class ToolDiscoveryTests
         Assert.Throws<InvalidOperationException>(() =>
         {
             _ = new AgentBuilder()
-                .WithModelProvider(new FakeModelProvider(EchoModel))
+                .WithChatClient(new FakeChatClient(EchoModel))
                 .WithToolsFromAssembly(Assembly.GetExecutingAssembly())
                 .Build();
         });
@@ -305,7 +305,7 @@ public class ToolDiscoveryTests
         var model = new ToolRequestingModel("attr_name_override", "{}", "call-attr-1");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .WithTool(new ToolWithAttrOverrides())
             .Build();
 
@@ -325,7 +325,7 @@ public class ToolDiscoveryTests
         var model = new ToolRequestingModel("attr_name_only", "{}", "call-attr-2");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .WithTool(new ToolWithAttrNameOnly())
             .Build();
 
@@ -342,7 +342,7 @@ public class ToolDiscoveryTests
         var model = new ToolRequestingModel("marked_tool", "{}", "call-plain-1");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .WithTool(new MarkedTool())
             .Build();
 

@@ -142,7 +142,7 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
         return list;
     }
 
-    public async Task StoreEmbeddingAsync(string id, float[] embedding, CancellationToken cancellationToken = default)
+    public async Task StoreEmbeddingAsync(string id, ReadOnlyMemory<float> embedding, CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
 
@@ -155,11 +155,11 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
         var cmd = _connection!.CreateCommand();
         cmd.CommandText = "INSERT OR REPLACE INTO memory(id, content, embedding) VALUES($id, COALESCE((SELECT content FROM memory WHERE id = $id), ''), $embedding);";
         cmd.Parameters.AddWithValue("$id", id);
-        cmd.Parameters.AddWithValue("$embedding", JsonSerializer.Serialize(embedding));
+        cmd.Parameters.AddWithValue("$embedding", JsonSerializer.Serialize(embedding.ToArray()));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(float[] queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(ReadOnlyMemory<float> queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
 
@@ -179,7 +179,6 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
         }
 
         var cmd = _connection!.CreateCommand();
-        // Load only the most recent rows to bound memory usage; cosine scoring is done in-process.
         cmd.CommandText = "SELECT content, embedding FROM memory WHERE embedding IS NOT NULL ORDER BY rowid DESC LIMIT 1000;";
 
         var similarities = new List<(string Content, float Score)>();
@@ -189,7 +188,7 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
             var content = reader.GetString(0);
             var embeddingJson = reader.GetString(1);
             var embedding = JsonSerializer.Deserialize<float[]>(embeddingJson)!;
-            var score = VectorMath.CosineSimilarity(queryEmbedding, embedding);
+            var score = CosineSimilarity(queryEmbedding.Span, embedding);
             similarities.Add((content, score));
         }
 
@@ -197,6 +196,19 @@ public sealed class SqliteMemoryService : IMemoryService, IDisposable
             .OrderByDescending(x => x.Score)
             .Take(topK)
             .ToList();
+    }
+
+    private static float CosineSimilarity(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
+    {
+        float dot = 0, magA = 0, magB = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot  += a[i] * b[i];
+            magA += a[i] * a[i];
+            magB += b[i] * b[i];
+        }
+        float denom = MathF.Sqrt(magA) * MathF.Sqrt(magB);
+        return denom == 0f ? 0f : dot / denom;
     }
 
     private void EnsureInitialized()

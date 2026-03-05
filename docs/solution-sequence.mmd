@@ -2,14 +2,14 @@ sequenceDiagram
     autonumber
     actor User
     participant Builder as AgenticBuilder
-    participant Provider as IModelProvider
+    participant Provider as IChatClient
     participant Assistant as Agent
     participant Memory as IMemoryService
     participant MW1 as Middleware[0]
     participant MWn as Middleware[n]
     participant Model as IAssistantModel
 
-    User->>Builder: WithModelProvider(provider)
+    User->>Builder: WithChatClient(chatClient)
     User->>Builder: WithMemory(memory) (optional)
     User->>Builder: UseMiddleware(mw1), UseMiddleware(mw2)... (optional)
     User->>Builder: Build()

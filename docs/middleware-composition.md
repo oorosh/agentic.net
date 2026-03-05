@@ -82,7 +82,7 @@ You're building an API for your agent that needs:
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     
     // Layer 1: Security & Control
     .UseMiddleware(new AuthenticationMiddleware())
@@ -374,7 +374,7 @@ public async Task MiddlewareStack_ExecutesInOrder()
     var middleware3 = new LoggingMiddleware("M3", log);
     
     var agent = new AgentBuilder()
-        .WithModelProvider(mockProvider)
+        .WithChatClient(mockChatClient)
         .UseMiddleware(middleware1)
         .UseMiddleware(middleware2)
         .UseMiddleware(middleware3)

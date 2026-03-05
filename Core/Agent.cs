@@ -6,6 +6,7 @@ using System.Text;
 using Agentic.Abstractions;
 using Agentic.Loaders;
 using Agentic.Middleware;
+using Microsoft.Extensions.AI;
 
 namespace Agentic.Core;
 
@@ -14,7 +15,7 @@ public sealed class Agent : IAgent, IAsyncDisposable
     private const int MaxToolCallDepth = 12;
     private readonly IAgentModel _model;
     private readonly IMemoryService? _memoryService;
-    private readonly IEmbeddingProvider? _embeddingProvider;
+    private readonly IEmbeddingGenerator<string, Embedding<float>>? _embeddingGenerator;
     private readonly IAssistantContextFactory _contextFactory;
     private readonly IReadOnlyList<IAssistantMiddleware> _middlewares;
     private readonly IReadOnlyDictionary<string, ITool> _tools;
@@ -38,7 +39,7 @@ public sealed class Agent : IAgent, IAsyncDisposable
     internal Agent(
         IAgentModel model,
         IMemoryService? memoryService,
-        IEmbeddingProvider? embeddingProvider,
+        IEmbeddingGenerator<string, Embedding<float>>? embeddingGenerator,
         IAssistantContextFactory contextFactory,
         IReadOnlyList<IAssistantMiddleware> middlewares,
         IReadOnlyDictionary<string, ITool> tools,
@@ -49,7 +50,7 @@ public sealed class Agent : IAgent, IAsyncDisposable
     {
         _model = model;
         _memoryService = memoryService;
-        _embeddingProvider = embeddingProvider;
+        _embeddingGenerator = embeddingGenerator;
         _contextFactory = contextFactory;
         _middlewares = middlewares;
         _tools = tools;
@@ -80,11 +81,6 @@ public sealed class Agent : IAgent, IAsyncDisposable
         if (_memoryService is not null)
         {
             await _memoryService.InitializeAsync(cancellationToken);
-        }
-
-        if (_embeddingProvider is not null)
-        {
-            await _embeddingProvider.InitializeAsync(cancellationToken);
         }
 
         if (_skillLoader is not null)
@@ -443,12 +439,12 @@ public sealed class Agent : IAgent, IAsyncDisposable
         var responseId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(responseContent + DateTimeOffset.UtcNow.Ticks)));
         await _memoryService.StoreMessageAsync(responseId, responseContent, cancellationToken);
 
-        if (_embeddingProvider is not null)
+        if (_embeddingGenerator is not null)
         {
-            var userEmbedding = await _embeddingProvider.GenerateEmbeddingAsync(input, cancellationToken);
-            await _memoryService.StoreEmbeddingAsync(userId, userEmbedding, cancellationToken);
-            var responseEmbedding = await _embeddingProvider.GenerateEmbeddingAsync(responseContent, cancellationToken);
-            await _memoryService.StoreEmbeddingAsync(responseId, responseEmbedding, cancellationToken);
+            var userEmbeddings = await _embeddingGenerator.GenerateAsync([input], cancellationToken: cancellationToken);
+            await _memoryService.StoreEmbeddingAsync(userId, userEmbeddings[0].Vector, cancellationToken);
+            var responseEmbeddings = await _embeddingGenerator.GenerateAsync([responseContent], cancellationToken: cancellationToken);
+            await _memoryService.StoreEmbeddingAsync(responseId, responseEmbeddings[0].Vector, cancellationToken);
         }
     }
 
@@ -545,9 +541,9 @@ public sealed class Agent : IAgent, IAsyncDisposable
         else if (_memoryService is IDisposable disposableMemory)
             disposableMemory.Dispose();
 
-        if (_embeddingProvider is IAsyncDisposable asyncDisposableEmbedding)
+        if (_embeddingGenerator is IAsyncDisposable asyncDisposableEmbedding)
             await asyncDisposableEmbedding.DisposeAsync();
-        else if (_embeddingProvider is IDisposable disposableEmbedding)
+        else if (_embeddingGenerator is IDisposable disposableEmbedding)
             disposableEmbedding.Dispose();
     }
 }

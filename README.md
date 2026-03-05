@@ -4,27 +4,31 @@
 
 Build AI agents in .NET with pluggable models, memory, middleware, tools, skills, and identity.
 
+Agentic.NET is built on [Microsoft.Extensions.AI](https://learn.microsoft.com/en-us/dotnet/ai/microsoft-extensions-ai) (MEAI) abstractions. You bring any `IChatClient` — OpenAI, Azure OpenAI, Ollama, Anthropic, or your own — and the library wires conversation, memory, middleware, tools, skills, and identity around it.
+
 The library exposes a minimal runtime with:
 
-- `IAgentModel` abstraction for the underlying LLM or chat model
+- `IChatClient` (MEAI) as the underlying LLM abstraction — bring any MEAI-compatible provider
 - optional memory (`IMemoryService`) with built-in SQLite and in‑memory providers
-- optional embeddings (`IEmbeddingProvider`) with pluggable vector storage (`IVectorStore`)
+- optional embeddings (`IEmbeddingGenerator<string, Embedding<float>>`, MEAI) with pluggable vector storage (`IVectorStore`)
 - optional skills (`ISkillLoader`) from Agent Skills format
 - optional identity (`ISoulLoader`) from SOUL.md format
 - middleware hooks (`IAssistantMiddleware`) to preprocess or postprocess conversation
 - a tool‑calling mechanism (`ITool`) that the model can invoke
 - optional heartbeat (`IHeartbeatService`) for proactive, time-driven agent behavior
 
-Designed for clarity and composability, the API lets your app stay in control while leverage AI logic.
+Designed for clarity and composability, the API lets your app stay in control while leveraging AI logic.
 
 ## Install
 
-### NuGet (recommended for application developers)
-
-The package is published on nuget.org and can be added by running:
-
 ```bash
 dotnet add package Agentic.NET
+```
+
+You also need a MEAI-compatible chat client. For OpenAI:
+
+```bash
+dotnet add package Microsoft.Extensions.AI.OpenAI
 ```
 
 NuGet clients (Visual Studio, Rider, CLI) will pull the compiled library and dependencies automatically.
@@ -33,15 +37,16 @@ NuGet clients (Visual Studio, Rider, CLI) will pull the compiled library and dep
 
 ```csharp
 using Agentic.Builder;
-using Agentic.Providers.OpenAi;
+using Microsoft.Extensions.AI;
+using OpenAI;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
     ?? throw new InvalidOperationException("Set OPENAI_API_KEY first.");
 
-var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
 
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey, model)
+    .WithChatClient(chatClient)
     .Build();
 
 var reply = await agent.ReplyAsync("Hello");
@@ -85,7 +90,8 @@ Register tools so the model can invoke them during a conversation. Use `[ToolPar
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
+using Microsoft.Extensions.AI;
+using OpenAI;
 
 // Define a tool with typed parameters
 public sealed class WeatherTool : ITool
@@ -107,8 +113,10 @@ public sealed class WeatherTool : ITool
 }
 
 // Register with the builder — schema auto-generated, no manual JSON needed
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
+
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithTool(new WeatherTool())
     .Build();
 
@@ -128,7 +136,7 @@ public sealed class WeatherTool : ITool { ... }
 public sealed class CalcTool : ITool { ... }
 
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithToolsFromCallingAssembly()   // scans your assembly for [AgenticTool] classes
     .Build();
 ```
@@ -147,49 +155,40 @@ Manual `WithTool()` and auto-discovery can be freely mixed. The attribute also a
 public sealed class WeatherToolV2 : ITool { ... }
 ```
 
-## Custom model provider (optional)
+## Bring your own model
 
-If you need a non-OpenAI backend, implement your own provider:
+Agentic.NET accepts any `IChatClient` from `Microsoft.Extensions.AI`. Use any MEAI-compatible provider:
 
 ```csharp
-using Agentic.Abstractions;
-using Agentic.Builder;
-using Agentic.Core;
+// OpenAI
+using Microsoft.Extensions.AI;
+using OpenAI;
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
 
-public sealed class DemoModelProvider : IModelProvider
-{
-    public IAgentModel CreateModel() => new DemoModel();
-}
+// Azure OpenAI
+using Azure.AI.OpenAI;
+var chatClient = new AzureOpenAIClient(endpoint, credential).AsChatClient("gpt-4o");
 
-public sealed class DemoModel : IAgentModel
-{
-    public Task<AgentResponse> CompleteAsync(
-        IReadOnlyList<ChatMessage> messages,
-        CancellationToken cancellationToken = default)
-    {
-        var lastUser = messages.Last(m => m.Role == ChatRole.User).Content;
-        return Task.FromResult(new AgentResponse($"Echo: {lastUser}"));
-    }
+// Ollama (local)
+using Microsoft.Extensions.AI;
+var chatClient = new OllamaChatClient(new Uri("http://localhost:11434"), "llama3.2");
 
-    // Streaming — emit the full response as a single token, then the sentinel.
-    public async IAsyncEnumerable<StreamingToken> StreamAsync(
-        IReadOnlyList<ChatMessage> messages,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var response = await CompleteAsync(messages, cancellationToken);
-        yield return new StreamingToken(response.Content, IsComplete: false);
-        yield return new StreamingToken(Delta: string.Empty, IsComplete: true,
-            FinalUsage: response.Usage, FinishReason: response.FinishReason, ModelId: response.ModelId);
-    }
-}
+// Or implement IChatClient yourself for any other backend
 ```
+
+```csharp
+var agent = new AgentBuilder()
+    .WithChatClient(chatClient)
+    .Build();
+```
+
 ## Heartbeat
 
 Give your agent a timer-driven "heartbeat" so it can take initiative without waiting for user input — useful for reminders, background monitoring, or proactive status updates.
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithHeartbeat(interval: TimeSpan.FromMinutes(5))
     .Build();
 
@@ -215,9 +214,7 @@ Key options via `HeartbeatOptions`:
 
 ## Typical integration pattern
 
-1. Choose a model setup:
-    - built-in OpenAI via `WithOpenAi(...)`, or
-    - custom provider via `WithModelProvider(...)`.
+1. Choose a chat client: any `IChatClient` from `Microsoft.Extensions.AI` (OpenAI, Azure, Ollama, custom).
 2. Build an `Agent` with `AgentBuilder`.
 3. Optionally add memory with `WithMemory(...)`.
 4. Optionally add skills with `WithSkills()` or `WithSkills(path)`.
@@ -235,7 +232,7 @@ Key options via `HeartbeatOptions`:
 - `StreamingToken`: a single chunk from `StreamAsync` — `Delta` (incremental text), `IsComplete` (sentinel flag), `FinalUsage`, `FinishReason`, `ModelId` on the last chunk.
 - `IAssistantMiddleware`: pipeline steps around model execution (e.g., memory injection, content safeguards); implement `StreamAsync` to participate in the streaming pipeline.
 - `IMemoryService`: store/retrieve memory for context injection.
-- `IEmbeddingProvider` (Vector Provider): generates embeddings for semantic memory search.
+- `IEmbeddingGenerator<string, Embedding<float>>` (MEAI): generates embeddings for semantic memory search.
 - `IVectorStore`: pluggable vector storage (pgvector, in-memory, etc.).
 - `ISkillLoader`: loads agent skills from filesystem.
 - `ISoulLoader`: loads agent identity from SOUL.md; supports dynamic personality updates with `ReloadSoulAsync()` and `UpdateSoulAsync()`.
@@ -259,9 +256,9 @@ Agentic.NET includes several runnable samples to demonstrate different features 
 
 ### Basic Chat (`samples/BasicChat`)
 
-The simplest example showing how to create an agent with a custom model provider. Demonstrates:
+The simplest example showing how to create an agent with a custom chat client. Demonstrates:
 - Basic `AgentBuilder` usage
-- Implementing `IModelProvider` and `IAgentModel`
+- Implementing `IChatClient` for a custom echo model
 - Interactive chat loop with console input/output
 - No external dependencies required
 
@@ -495,7 +492,6 @@ agent.reply                          ← one per ReplyAsync call
 
 | Tag | Span | Description |
 |---|---|---|
-| `gen_ai.system` | `llm.complete` | Always `openai` for the built-in provider |
 | `gen_ai.operation.name` | `llm.complete` | Always `chat` |
 | `gen_ai.request.model` | `llm.complete` | Model name (e.g. `gpt-4o-mini`) |
 | `gen_ai.usage.input_tokens` | `llm.complete` | Prompt token count |
@@ -538,14 +534,13 @@ Samples that use OpenAI require the following environment variables:
 | What you need | `using` directive |
 |---|---|
 | `AgentBuilder` | `using Agentic.Builder;` |
-| `OpenAiModels` constants | `using Agentic.Providers.OpenAi;` |
 | `ITool`, `ToolParameterAttribute`, `IMemoryService`, `IHeartbeatService` | `using Agentic.Abstractions;` |
 | `ChatMessage`, `ChatRole`, `AgentReply`, `AgentResponse`, `StreamingToken`, `UsageInfo`, `SqliteMemoryService`, `HeartbeatOptions`, `HeartbeatResult`, `HeartbeatSkipReason` | `using Agentic.Core;` |
 | `IAssistantMiddleware`, `AgentContext`, `AgentHandler`, `AgentStreamingHandler` | `using Agentic.Middleware;` |
 | `InMemoryVectorStore`, `PgVectorStore` | `using Agentic.Stores;` |
-| `OpenAiEmbeddingProvider` | `using Agentic.Providers.OpenAi;` |
+| `IChatClient`, `IEmbeddingGenerator`, `ChatMessage` (MEAI), `Embedding<float>` | `using Microsoft.Extensions.AI;` |
 
-Most applications only need `Agentic.Builder` and `Agentic.Providers.OpenAi`. Tools additionally need `Agentic.Abstractions` and `Agentic.Core`.
+Most applications only need `Agentic.Builder` and `Microsoft.Extensions.AI` (plus the MEAI provider package). Tools additionally need `Agentic.Abstractions` and `Agentic.Core`.
 
 ## Repository layout
 
@@ -554,7 +549,6 @@ Most applications only need `Agentic.Builder` and `Agentic.Providers.OpenAi`. To
 - `Core/` runtime types and built-in memory implementations
 - `Loaders/` skill and SOUL document loaders
 - `Middleware/` middleware contracts and built-in memory middleware
-- `Providers/OpenAi/` OpenAI provider implementation
 - `Stores/` vector store implementations (pgvector, in-memory)
 - `samples/` runnable usage examples
 - `tests/` unit tests

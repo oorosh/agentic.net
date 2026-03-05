@@ -12,7 +12,7 @@ This document explains how middleware is executed in Agentic.NET.
 
 ```csharp
 var assistant = new AgentBuilder()
-    .WithModelProvider(provider)
+    .WithChatClient(chatClient)
     .WithMemory(memory)              // MemoryMiddleware auto-inserted at position 0
     .UseMiddleware(new FirstMw())    // Registered 1st
     .UseMiddleware(new SecondMw())   // Registered 2nd
@@ -122,7 +122,7 @@ From `samples/SafeguardMiddleware`:
 
 ```csharp
 var assistant = new AgentBuilder()
-    .WithModelProvider(provider)
+    .WithChatClient(chatClient)
     .UseMiddleware(new PromptGuardMiddleware())    // Executes 1st
     .UseMiddleware(new ResponseGuardMiddleware())  // Executes 2nd
     .Build();

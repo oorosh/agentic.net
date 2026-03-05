@@ -1,10 +1,11 @@
 using System.Diagnostics;
 using Agentic.Abstractions;
 using Agentic.Core;
+using Microsoft.Extensions.AI;
 
 namespace Agentic.Middleware;
 
-public sealed class MemoryMiddleware(IMemoryService memoryService, IEmbeddingProvider? embeddingProvider = null) : IAssistantMiddleware
+public sealed class MemoryMiddleware(IMemoryService memoryService, IEmbeddingGenerator<string, Embedding<float>>? embeddingGenerator = null) : IAssistantMiddleware
 {
     public async Task<AgentResponse> InvokeAsync(AgentContext context, AgentHandler next, CancellationToken cancellationToken = default)
     {
@@ -22,11 +23,12 @@ public sealed class MemoryMiddleware(IMemoryService memoryService, IEmbeddingPro
 
         using var activity = AgenticTelemetry.ActivitySource.StartActivity(AgenticTelemetry.Spans.MemoryRetrieval);
 
-        if (!initial && embeddingProvider != null)
+        if (!initial && embeddingGenerator != null)
         {
             mode = "semantic";
             activity?.SetTag(AgenticTelemetry.Tags.AgentMemoryMode, mode);
-            var queryEmbedding = await embeddingProvider.GenerateEmbeddingAsync(query, cancellationToken);
+            var embeddings = await embeddingGenerator.GenerateAsync([query], cancellationToken: cancellationToken);
+            var queryEmbedding = embeddings[0].Vector;
             var similar = await memoryService.RetrieveSimilarAsync(queryEmbedding, topK, cancellationToken);
             memories = similar.Select(x => x.Content).ToList();
         }
@@ -44,7 +46,7 @@ public sealed class MemoryMiddleware(IMemoryService memoryService, IEmbeddingPro
         if (memories.Count > 0)
         {
             var memoryContext = "Relevant past conversation:\n" + string.Join("\n", memories);
-            context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, memoryContext));
+            context.WorkingMessages.Insert(0, new Agentic.Core.ChatMessage(Agentic.Core.ChatRole.System, memoryContext));
         }
 
         return await next(context, cancellationToken);

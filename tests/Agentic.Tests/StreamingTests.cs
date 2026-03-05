@@ -29,7 +29,7 @@ public sealed class StreamingTests
     public async Task StreamAsync_yields_incremental_tokens_before_complete()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["Hello", " ", "World"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["Hello", " ", "World"])))
             .Build();
 
         await agent.InitializeAsync();
@@ -50,7 +50,7 @@ public sealed class StreamingTests
     public async Task StreamAsync_last_token_is_complete()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["Hi"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["Hi"])))
             .Build();
 
         await agent.InitializeAsync();
@@ -68,7 +68,7 @@ public sealed class StreamingTests
     public async Task StreamAsync_only_one_complete_token_is_emitted()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["a", "b", "c"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["a", "b", "c"])))
             .Build();
 
         await agent.InitializeAsync();
@@ -92,7 +92,7 @@ public sealed class StreamingTests
         var model = new MetadataStreamModel("answer", usage, "stop", "test-model-v1");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .Build();
 
         await agent.InitializeAsync();
@@ -111,7 +111,7 @@ public sealed class StreamingTests
         var model = new MetadataStreamModel("answer", null, "stop", null);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .Build();
 
         await agent.InitializeAsync();
@@ -129,7 +129,7 @@ public sealed class StreamingTests
         var model = new MetadataStreamModel("answer", null, null, "gpt-test-model");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .Build();
 
         await agent.InitializeAsync();
@@ -145,7 +145,7 @@ public sealed class StreamingTests
     public async Task StreamAsync_final_token_has_null_metadata_when_model_provides_none()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["hi"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["hi"])))
             .Build();
 
         await agent.InitializeAsync();
@@ -167,7 +167,7 @@ public sealed class StreamingTests
     public async Task StreamAsync_history_is_empty_before_stream_is_consumed()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["hello"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["hello"])))
             .Build();
 
         await agent.InitializeAsync();
@@ -183,7 +183,7 @@ public sealed class StreamingTests
     public async Task StreamAsync_history_is_updated_after_full_consumption()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["hello"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["hello"])))
             .Build();
 
         await agent.InitializeAsync();
@@ -201,7 +201,7 @@ public sealed class StreamingTests
     public async Task StreamAsync_history_accumulates_content_from_all_tokens()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["Hel", "lo", " World"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["Hel", "lo", " World"])))
             .Build();
 
         await agent.InitializeAsync();
@@ -215,7 +215,7 @@ public sealed class StreamingTests
     public async Task StreamAsync_multiple_turns_accumulate_history()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .Build();
 
         await agent.InitializeAsync();
@@ -239,7 +239,7 @@ public sealed class StreamingTests
         var middleware = new TrackingStreamMiddleware(() => streamingInvoked = true);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["hi"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["hi"])))
             .UseMiddleware(middleware)
             .Build();
 
@@ -259,7 +259,7 @@ public sealed class StreamingTests
         var mw3 = new NamedStreamMiddleware("mw3", order);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["ok"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["ok"])))
             .UseMiddleware(mw1)
             .UseMiddleware(mw2)
             .UseMiddleware(mw3)
@@ -280,7 +280,7 @@ public sealed class StreamingTests
         var passThrough = new InvokeOnlyMiddleware();
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["a", "b"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["a", "b"])))
             .UseMiddleware(passThrough)
             .Build();
 
@@ -300,7 +300,7 @@ public sealed class StreamingTests
         var middleware = new ShortCircuitStreamMiddleware("overridden");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new MultiTokenModel(["should-not-appear"])))
+            .WithChatClient(new FakeChatClient(new MultiTokenModel(["should-not-appear"])))
             .UseMiddleware(middleware)
             .Build();
 
@@ -325,7 +325,7 @@ public sealed class StreamingTests
         var model = new MetadataCompleteModel("answer", usage, "stop", "test-model");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .Build();
 
         await agent.InitializeAsync();
@@ -343,7 +343,7 @@ public sealed class StreamingTests
         var model = new MetadataCompleteModel("answer", null, "stop", null);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .Build();
 
         await agent.InitializeAsync();
@@ -358,7 +358,7 @@ public sealed class StreamingTests
         var model = new MetadataCompleteModel("answer", null, null, "gpt-test");
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(model))
+            .WithChatClient(new FakeChatClient(model))
             .Build();
 
         await agent.InitializeAsync();
@@ -371,7 +371,7 @@ public sealed class StreamingTests
     public async Task ReplyAsync_reply_Duration_is_positive()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .Build();
 
         await agent.InitializeAsync();
@@ -384,7 +384,7 @@ public sealed class StreamingTests
     public async Task ReplyAsync_reply_fields_are_null_when_model_provides_none()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .Build();
 
         await agent.InitializeAsync();
@@ -399,7 +399,7 @@ public sealed class StreamingTests
     public async Task ReplyAsync_reply_Content_and_implicit_string_still_work()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .Build();
 
         await agent.InitializeAsync();

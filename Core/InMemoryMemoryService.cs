@@ -5,7 +5,7 @@ namespace Agentic.Core;
 public sealed class InMemoryMemoryService : IMemoryService
 {
     private readonly Dictionary<string, string> _store = new();
-    private readonly Dictionary<string, float[]> _embeddings = new();
+    private readonly Dictionary<string, ReadOnlyMemory<float>> _embeddings = new();
     private bool _initialized;
 
     public Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -54,7 +54,7 @@ public sealed class InMemoryMemoryService : IMemoryService
         return Task.FromResult<IReadOnlyList<string>>(matches);
     }
 
-    public Task StoreEmbeddingAsync(string id, float[] embedding, CancellationToken cancellationToken = default)
+    public Task StoreEmbeddingAsync(string id, ReadOnlyMemory<float> embedding, CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
 
@@ -62,7 +62,7 @@ public sealed class InMemoryMemoryService : IMemoryService
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(float[] queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(ReadOnlyMemory<float> queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
 
@@ -70,13 +70,26 @@ public sealed class InMemoryMemoryService : IMemoryService
             .Where(kvp => _embeddings.ContainsKey(kvp.Key))
             .Select(kvp => (
                 Content: kvp.Value,
-                Score: VectorMath.CosineSimilarity(queryEmbedding, _embeddings[kvp.Key])
+                Score: CosineSimilarity(queryEmbedding.Span, _embeddings[kvp.Key].Span)
             ))
             .OrderByDescending(x => x.Score)
             .Take(topK)
             .ToList();
 
         return Task.FromResult<IReadOnlyList<(string Content, float Score)>>(similarities);
+    }
+
+    private static float CosineSimilarity(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
+    {
+        float dot = 0, magA = 0, magB = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot  += a[i] * b[i];
+            magA += a[i] * a[i];
+            magB += b[i] * b[i];
+        }
+        float denom = MathF.Sqrt(magA) * MathF.Sqrt(magB);
+        return denom == 0f ? 0f : dot / denom;
     }
 
     private void EnsureInitialized()

@@ -97,27 +97,27 @@ dotnet test tests/Agentic.Tests/Agentic.Tests.csproj -c Release -v n
 
 ```
 Agentic.NET/
-├── Abstractions/     # Interfaces and contracts (IAgentModel, ITool, etc.)
+├── Abstractions/     # Interfaces and contracts (ITool, IMemoryService, etc.)
 ├── Builder/           # AgentBuilder fluent API
 ├── Core/             # Runtime types (Agent, AgentContext, ChatMessage)
 ├── Loaders/          # Skill and SOUL document loaders
 ├── Middleware/       # Middleware contracts and implementations
-├── Providers/        # Model provider implementations (OpenAI)
 ├── Stores/           # Vector store implementations (PgVector, InMemory)
 ├── samples/          # Usage examples
 └── tests/            # Unit tests
 ```
 
 ### Key Interfaces
-- **`IAgentModel`**: Underlying LLM/chat model abstraction
+- **`IChatClient`** (Microsoft.Extensions.AI): Underlying LLM/chat model abstraction — bring any MEAI-compatible provider
+- **`IEmbeddingGenerator<string, Embedding<float>>`** (Microsoft.Extensions.AI): Generates embeddings/vectors for semantic memory search
 - **`IMemoryService`**: Memory storage/retrieval with optional embeddings
-- **`IEmbeddingProvider`** (Vector Provider): Generates embeddings/vectors for semantic memory search
 - **`IVectorStore`**: Pluggable storage for embeddings (pgvector, in-memory, etc.)
 - **`ISkillLoader`**: Loads agent skills from filesystem
 - **`ISoulLoader`**: Loads agent identity from SOUL.md
 - **`IAssistantMiddleware`**: Pre/post-process conversation
 - **`ITool`**: Executable function the model can invoke
-- **`IModelProvider`**: Factory for creating model instances
+
+> **Note:** `IAgentModel` is `internal` — it is an adapter wrapping `IChatClient` and is not part of the public API. Users work with `IChatClient` from `Microsoft.Extensions.AI`.
 
 ### Configuration
 - Solution file: `Agentic.NET.sln`
@@ -139,12 +139,12 @@ Agentic.NET supports semantic memory through embeddings for improved context rel
 
 | Component | Purpose | Examples |
 |-----------|---------|----------|
-| **IEmbeddingProvider** (Vector Provider) | Generates embeddings from text | OpenAiEmbeddingProvider |
+| **`IEmbeddingGenerator<string, Embedding<float>>`** (MEAI) | Generates embeddings from text | `OpenAIClient.AsEmbeddingGenerator<string, Embedding<float>>()` |
 | **IVectorStore** | Stores and searches embeddings | PgVectorStore, InMemoryVectorStore |
 
 ### Adding Embeddings
-1. Add an **embedding provider**: `IEmbeddingProvider` generates vectors from text
-2. Configure in `AgentBuilder`: `.WithEmbeddingProvider(provider)`
+1. Get an **embedding generator**: any `IEmbeddingGenerator<string, Embedding<float>>` from a MEAI provider
+2. Configure in `AgentBuilder`: `.WithEmbeddingGenerator(generator)`
 3. Optionally add a **vector store**: `.WithVectorStore(vectorStore)` for production-scale search
 4. Embeddings are automatically generated and stored for each message
 5. Retrieval uses cosine similarity (or HNSW index with pgvector) for semantic matching
@@ -153,16 +153,20 @@ Agentic.NET supports semantic memory through embeddings for improved context rel
 
 #### In-Memory (Development)
 ```csharp
-var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
-await embeddingProvider.InitializeAsync();
+using Microsoft.Extensions.AI;
+using OpenAI;
 
-var vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+var openAiClient = new OpenAIClient(apiKey);
+var chatClient = openAiClient.AsChatClient("gpt-4o-mini");
+var embeddingGenerator = openAiClient.AsEmbeddingGenerator<string, Embedding<float>>("text-embedding-3-small");
+
+var vectorStore = new InMemoryVectorStore(dimensions: 1536);
 
 var assistant = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .WithEmbeddingProvider(embeddingProvider)
+    .WithChatClient(chatClient)
+    .WithEmbeddingGenerator(embeddingGenerator)
     .WithVectorStore(vectorStore)
-    .WithMemory(new SqliteMemoryService())
+    .WithMemory("memory.db")
     .Build();
 ```
 
@@ -173,26 +177,23 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 ```csharp
-var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
-await embeddingProvider.InitializeAsync();
-
 var vectorStore = new PgVectorStore(
     "Host=localhost;Database=memory",
-    dimensions: embeddingProvider.Dimensions
+    dimensions: 1536
 );
 
 var assistant = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .WithEmbeddingProvider(embeddingProvider)
+    .WithChatClient(chatClient)
+    .WithEmbeddingGenerator(embeddingGenerator)
     .WithVectorStore(vectorStore)
-    .WithMemory(new SqliteMemoryService(vectorStore))
+    .WithMemory("memory.db", vectorStore)
     .Build();
 ```
 
 #### Adding Custom Vector Stores
 Implement `IVectorStore` interface to add support for other vector databases:
 - Azure AI Search
-- Qudrant
+- Qdrant
 - Pinecone
 - Milvus
 - Weaviate
@@ -200,16 +201,49 @@ Implement `IVectorStore` interface to add support for other vector databases:
 ### Benefits
 - Better recall of semantically similar conversations
 - Reduced false positives from keyword matching
-- Pluggable providers for different embedding models
+- Pluggable embedding generators for different embedding models
 - Pluggable vector storage for production scalability
 
 ## Common Tasks
 
-### Adding a new model provider
-1. Create provider class in `Providers/` directory
-2. Implement `IModelProvider` interface
-3. Add `WithXxx()` method to `AgentBuilder`
-4. Add tests for the new provider
+### Using a custom chat client
+Implement `IChatClient` from `Microsoft.Extensions.AI` to connect any LLM backend:
+
+```csharp
+using Microsoft.Extensions.AI;
+
+public sealed class MyCustomChatClient : IChatClient
+{
+    public ChatClientMetadata Metadata => new("my-provider", null, null);
+
+    public async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        var lastUser = messages.Last(m => m.Role == ChatRole.User).Text;
+        return new ChatResponse([new ChatMessage(ChatRole.Assistant, "Echo: " + lastUser)]);
+    }
+
+    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+    public void Dispose() { }
+}
+
+var agent = new AgentBuilder()
+    .WithChatClient(new MyCustomChatClient())
+    .Build();
+```
+
+### MEAI naming conflict
+`Microsoft.Extensions.AI.ChatMessage` conflicts with `Agentic.Core.ChatMessage`. Do **not** add `global using Microsoft.Extensions.AI;` to `GlobalUsings.cs`. In files that need both:
+- Use `using Microsoft.Extensions.AI;` scoped to that file only
+- Qualify `Agentic.Core.ChatMessage` and `Agentic.Core.ChatRole` explicitly in those files
 
 ### Adding a new tool
 1. Implement `ITool` interface with `Name`, `Description`, and `InvokeAsync`
@@ -245,13 +279,13 @@ Step-by-step instructions for the agent...
 ```csharp
 // From default ./skills directory in app base
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithSkills()  // loads from ./skills/
     .Build();
 
 // From custom directory
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithSkills("./my-skills")  // Load all skills from directory
     .Build();
 
@@ -302,7 +336,7 @@ You are a content marketing specialist for a SaaS company.
 ### Loading SOUL.md
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithSoul("./SOUL.md")  // or directory (looks for SOUL.md)
     .Build();
 
@@ -322,16 +356,20 @@ Implement `ISoulLoader` interface to load SOUL.md from other sources
 ## Complete Example
 
 ```csharp
-var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
-await embeddingProvider.InitializeAsync();
+using Microsoft.Extensions.AI;
+using OpenAI;
 
-var vectorStore = new PgVectorStore(connectionString, dimensions: embeddingProvider.Dimensions);
+var openAiClient = new OpenAIClient(apiKey);
+var chatClient = openAiClient.AsChatClient("gpt-4o-mini");
+var embeddingGenerator = openAiClient.AsEmbeddingGenerator<string, Embedding<float>>("text-embedding-3-small");
+
+var vectorStore = new PgVectorStore(connectionString, dimensions: 1536);
 
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .WithMemory(new SqliteMemoryService(vectorStore))
-    .WithEmbeddingProvider(embeddingProvider)
+    .WithChatClient(chatClient)
+    .WithEmbeddingGenerator(embeddingGenerator)
     .WithVectorStore(vectorStore)
+    .WithMemory("memory.db", vectorStore)
     .WithSkills("./skills")   // Load agent skills
     .WithSoul("./SOUL.md")    // Load agent identity
     .WithTool(new MyCustomTool())

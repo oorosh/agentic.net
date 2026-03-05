@@ -2,15 +2,15 @@
 
 This sample demonstrates the most basic usage of Agentic.NET. It shows how to:
 
-- Create an `Agent` using the `AgentBuilder` with a custom model provider
-- Implement a simple echo model that repeats the user's input
+- Create an `Agent` using the `AgentBuilder` with a custom chat client
+- Implement a simple echo `IChatClient` that repeats the user's input
 - Run an interactive chat loop where the user can type messages and receive responses
 - Handle exit commands gracefully
 
 ## Key Features Demonstrated
 
-- **Minimal Agent Setup**: Uses `AgentBuilder` with only a model provider
-- **Custom Model Provider**: Implements `IModelProvider` and `IAgentModel` for a demo echo model
+- **Minimal Agent Setup**: Uses `AgentBuilder` with only a chat client
+- **Custom Chat Client**: Implements `IChatClient` (from `Microsoft.Extensions.AI`) for a demo echo model
 - **Interactive Chat Loop**: Reads user input from console and responds in real-time
 - **Basic Error Handling**: Continues on empty input, exits on 'exit' command
 
@@ -38,9 +38,9 @@ Assistant: Echo: How are you?
 ## Code Highlights
 
 ```csharp
-// Create agent with custom model provider
+// Create agent with custom chat client
 var assistant = new AgentBuilder()
-    .WithModelProvider(new DemoModelProvider())
+    .WithChatClient(new DemoChatClient())
     .Build();
 
 // Interactive chat loop

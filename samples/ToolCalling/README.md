@@ -1,11 +1,11 @@
 # Tool Calling Sample
 
-This sample demonstrates how to add tool-calling capabilities to an Agentic.NET assistant using OpenAI's function calling feature. It shows how models can invoke external functions during conversations.
+This sample demonstrates how to add tool-calling capabilities to an Agentic.NET assistant. It shows how models can invoke external functions during conversations.
 
 ## Key Features Demonstrated
 
-- **OpenAI Integration**: Uses the OpenAI provider with function calling support
-- **Tool Registration**: Registers tools using `WithTool()` and OpenAI function definitions
+- **MEAI Integration**: Uses any `IChatClient` from Microsoft.Extensions.AI
+- **Tool Registration**: Registers tools using `WithTool()` and property-based parameter definitions
 - **Function Calling**: Implements `ITool` interface for executable functions
 - **Interactive Tool Use**: Shows how the assistant can call tools based on user input
 - **Mock Implementation**: Uses a simulated weather tool for demonstration
@@ -44,8 +44,13 @@ Assistant: Paris: 5°C, clear sky
 Register tools with `WithTool()`. Tool parameters are declared as properties decorated with `[ToolParameter]` — Agentic.NET automatically generates the function schema for the model.
 
 ```csharp
+using Microsoft.Extensions.AI;
+using OpenAI;
+
+var chatClient = new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini");
+
 var assistant = new AgentBuilder()
-    .WithOpenAi(apiKey, model)
+    .WithChatClient(chatClient)
     .WithTool(new GetWeatherTool())
     .Build();
 ```

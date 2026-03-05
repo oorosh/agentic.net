@@ -72,7 +72,7 @@ public sealed class PgVectorStore : IVectorStore, IDisposable
         }
     }
 
-    public async Task UpsertAsync(string id, float[] vector, CancellationToken cancellationToken = default)
+    public async Task UpsertAsync(string id, ReadOnlyMemory<float> vector, CancellationToken cancellationToken = default)
     {
         if (!_initialized) throw new InvalidOperationException("Vector store not initialized.");
         if (vector.Length != _dimensions)
@@ -84,12 +84,12 @@ public sealed class PgVectorStore : IVectorStore, IDisposable
             ON CONFLICT (id) DO UPDATE SET vector = EXCLUDED.vector
         ";
         cmd.Parameters.AddWithValue("$1", id);
-        cmd.Parameters.AddWithValue("$2", ToPgVector(vector));
+        cmd.Parameters.AddWithValue("$2", ToPgVector(vector.Span));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<(string Id, float[] Vector, float Score)>> SearchAsync(
-        float[] queryVector,
+    public async Task<IReadOnlyList<(string Id, ReadOnlyMemory<float> Vector, float Score)>> SearchAsync(
+        ReadOnlyMemory<float> queryVector,
         int topK = 5,
         CancellationToken cancellationToken = default)
     {
@@ -104,15 +104,15 @@ public sealed class PgVectorStore : IVectorStore, IDisposable
             ORDER BY vector <=> $1
             LIMIT $2
         ";
-        cmd.Parameters.AddWithValue("$1", ToPgVector(queryVector.AsSpan()));
+        cmd.Parameters.AddWithValue("$1", ToPgVector(queryVector.Span));
         cmd.Parameters.AddWithValue("$2", topK);
 
-        var results = new List<(string Id, float[] Vector, float Score)>();
+        var results = new List<(string Id, ReadOnlyMemory<float> Vector, float Score)>();
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             var id = reader.GetString(0);
-            var vector = FromPgVector(reader.GetFieldValue<string>(1));
+            var vector = new ReadOnlyMemory<float>(FromPgVector(reader.GetFieldValue<string>(1)));
             var distance = (float)reader.GetDouble(2);
             results.Add(new(id, vector, 1 - distance));
         }

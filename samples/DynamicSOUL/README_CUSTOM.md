@@ -18,7 +18,7 @@ This sample demonstrates how to use dynamic SOUL.md support in Agentic.NET - ena
 var soulLoader = new FileSystemSoulLoader(Directory.GetCurrentDirectory());
 
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini"))
     .WithSoul(soulLoader)
     .Build();
 
@@ -93,7 +93,7 @@ public sealed class DatabaseSoulLoader : ISoulLoader
 // Usage
 var loader = new DatabaseSoulLoader("Server=localhost;Database=agents");
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini"))
     .WithSoul(loader)
     .Build();
 ```
@@ -168,7 +168,7 @@ public sealed class ApiSoulLoader : ISoulLoader
 
 var loader = new ApiSoulLoader("https://api.example.com");
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini"))
     .WithSoul(loader)
     .Build();
 ```

@@ -8,7 +8,6 @@ using Agentic.Builder;
 using Agentic.Core;
 using Agentic.Loaders;
 using Agentic.Middleware;
-using Agentic.Providers.OpenAi;
 using Agentic.Stores;
 using Agentic.Tests.Fakes;
 using System.IO;
@@ -26,40 +25,10 @@ public class AgentBuilderTests
     }
 
     [Fact]
-    public void Build_succeeds_when_openai_provider_configured_via_builder()
+    public void Build_succeeds_when_chat_client_configured_via_builder()
     {
         var assistant = new AgentBuilder()
-            .WithOpenAi("test-api-key")
-            .Build();
-
-        Assert.NotNull(assistant);
-    }
-
-    [Fact]
-    public void Build_succeeds_when_openai_model_configured_via_builder()
-    {
-        var assistant = new AgentBuilder()
-            .WithOpenAi("test-api-key", model: "gpt-4.1-mini")
-            .Build();
-
-        Assert.NotNull(assistant);
-    }
-
-    [Fact]
-    public void Build_succeeds_when_openai_options_are_configured_via_builder()
-    {
-        var assistant = new AgentBuilder()
-            .WithOpenAi("test-api-key", options =>
-            {
-                options.Model = "gpt-4.1-mini";
-                options.Tools =
-                [
-                    new OpenAiFunctionToolDefinition(
-                        "get_weather",
-                        "Get weather for a city.",
-                        [new OpenAiFunctionToolParameter("city", "string", "City name")])
-                ];
-            })
+            .WithChatClient(new FakeChatClient(new TestAgentModel()))
             .Build();
 
         Assert.NotNull(assistant);
@@ -78,7 +47,7 @@ public class AgentBuilderTests
         var mw2 = new RecordingMiddleware("mw2", calls, snapshots);
 
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+            .WithChatClient(new FakeChatClient(new TestAgentModel()))
             .WithMemory(memory)
             .UseMiddleware(mw1)
             .UseMiddleware(mw2)
@@ -99,9 +68,9 @@ public class AgentBuilderTests
     [Fact]
     public async Task History_accumulates_across_replies()
     {
-        var provider = new FakeModelProvider(new TestAgentModel());
+        var provider = new FakeChatClient(new TestAgentModel());
         var assistant = new AgentBuilder()
-            .WithModelProvider(provider)
+            .WithChatClient(provider)
             .Build();
 
         await assistant.ReplyAsync("one");
@@ -117,7 +86,7 @@ public class AgentBuilderTests
     {
         var memory = new TrackingMemoryService();
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+            .WithChatClient(new FakeChatClient(new TestAgentModel()))
             .WithMemory(memory)
             .Build();
 
@@ -133,14 +102,14 @@ public class AgentBuilderTests
         var memory = new TrackingMemoryService();
         memory.StoredMessages.Add("prior conversation");
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+            .WithChatClient(new FakeChatClient(new TestAgentModel()))
             .WithMemory(memory)
             .Build();
 
         // use a model that echoes full working messages for inspection
         var echoModel = new InspectingModel();
         assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(echoModel))
+            .WithChatClient(new FakeChatClient(echoModel))
             .WithMemory(memory)
             .Build();
 
@@ -205,13 +174,13 @@ public class AgentBuilderTests
             return Task.FromResult<IReadOnlyList<string>>(StoredMessages.ToList());
         }
 
-        public Task StoreEmbeddingAsync(string id, float[] embedding, CancellationToken cancellationToken = default)
+        public Task StoreEmbeddingAsync(string id, ReadOnlyMemory<float> embedding, CancellationToken cancellationToken = default)
         {
             // no-op for test
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(float[] queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<(string Content, float Score)>> RetrieveSimilarAsync(ReadOnlyMemory<float> queryEmbedding, int topK = 5, CancellationToken cancellationToken = default)
         {
             // return empty for test
             return Task.FromResult<IReadOnlyList<(string Content, float Score)>>(new List<(string, float)>());
@@ -289,7 +258,7 @@ public class AgentBuilderTests
             });
 
             var assistant = new AgentBuilder()
-                .WithModelProvider(provider)
+                .WithChatClient(provider)
                 .WithMemory(sqlite)
                 .Build();
 
@@ -339,7 +308,7 @@ public class AgentBuilderTests
     public async Task ReplyAsync_executes_tool_calls_until_final_answer()
     {
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new ToolCallingModel()))
+            .WithChatClient(new FakeChatClient(new ToolCallingModel()))
             .WithTool(new UppercaseTool())
             .Build();
 
@@ -352,7 +321,7 @@ public class AgentBuilderTests
     public async Task ReplyAsync_repeated_same_tool_call_returns_last_tool_result_instead_of_throwing()
     {
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new RepeatingToolCallingModel()))
+            .WithChatClient(new FakeChatClient(new RepeatingToolCallingModel()))
             .WithTool(new UppercaseTool())
             .Build();
 
@@ -367,7 +336,7 @@ public class AgentBuilderTests
         IReadOnlyList<ChatMessage>? captured = null;
 
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new CaptureModel(messages =>
+            .WithChatClient(new FakeChatClient(new CaptureModel(messages =>
             {
                 captured = messages;
                 return new AgentResponse("ok");
@@ -387,13 +356,12 @@ public class AgentBuilderTests
     [Fact]
     public async Task EmbeddingProvider_can_be_configured()
     {
-        var apiKey = "test-key";
-        var embeddingProvider = new Agentic.Providers.OpenAi.OpenAiEmbeddingProvider(apiKey);
+        var embeddingGenerator = new FakeEmbeddingGenerator(1536);
 
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+            .WithChatClient(new FakeChatClient(new TestAgentModel()))
             .WithMemory(new InMemoryMemoryService())
-            .WithEmbeddingProvider(embeddingProvider)
+            .WithEmbeddingGenerator(embeddingGenerator)
             .Build();
 
         // Should not throw
@@ -514,31 +482,37 @@ public class AgentBuilderTests
     }
 
     // provider that invokes a callback so tests can inspect the context
-    private sealed class CallbackProvider : IModelProvider
+    private sealed class CallbackProvider : Microsoft.Extensions.AI.IChatClient
     {
         private readonly Func<AgentContext, Task<AgentResponse>> _fn;
         public CallbackProvider(Func<AgentContext, Task<AgentResponse>> fn) => _fn = fn;
 
-        public IAgentModel CreateModel() => new CallbackModel(_fn);
+        public Microsoft.Extensions.AI.ChatClientMetadata Metadata => new("callback", null, null);
 
-        private sealed class CallbackModel : IAgentModel
+        public async Task<Microsoft.Extensions.AI.ChatResponse> GetResponseAsync(
+            IEnumerable<Microsoft.Extensions.AI.ChatMessage> messages,
+            Microsoft.Extensions.AI.ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
         {
-            private readonly Func<AgentContext, Task<AgentResponse>> _fn;
-            public CallbackModel(Func<AgentContext, Task<AgentResponse>> fn) => _fn = fn;
-
-            public Task<AgentResponse> CompleteAsync(
-                IReadOnlyList<ChatMessage> messages,
-                CancellationToken cancellationToken = default)
-            {
-                var ctx = new AgentContext(messages.Last(m => m.Role == ChatRole.User).Content, messages);
-                return _fn(ctx);
-            }
-
-            public IAsyncEnumerable<StreamingToken> StreamAsync(
-                IReadOnlyList<ChatMessage> messages,
-                CancellationToken cancellationToken = default) =>
-                FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
+            var agenticMessages = messages.Select(m => new ChatMessage(
+                m.Role == Microsoft.Extensions.AI.ChatRole.User ? ChatRole.User :
+                m.Role == Microsoft.Extensions.AI.ChatRole.System ? ChatRole.System :
+                m.Role == Microsoft.Extensions.AI.ChatRole.Tool ? ChatRole.Tool : ChatRole.Assistant,
+                m.Text ?? string.Empty)).ToList();
+            var ctx = new AgentContext(agenticMessages.Last(m => m.Role == ChatRole.User).Content, agenticMessages);
+            var r = await _fn(ctx);
+            return new Microsoft.Extensions.AI.ChatResponse(
+                new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.Assistant, r.Content));
         }
+
+        public IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<Microsoft.Extensions.AI.ChatMessage> messages,
+            Microsoft.Extensions.AI.ChatOptions? options = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+        public void Dispose() { }
     }
 
     [Fact]
@@ -547,10 +521,10 @@ public class AgentBuilderTests
         var store = new InMemoryVectorStore(dimensions: 3);
         await store.InitializeAsync();
 
-        await store.UpsertAsync("vec1", [1f, 0f, 0f]);
-        await store.UpsertAsync("vec2", [0f, 1f, 0f]);
+        await store.UpsertAsync("vec1", (float[])[1f, 0f, 0f]);
+        await store.UpsertAsync("vec2", (float[])[0f, 1f, 0f]);
 
-        var results = await store.SearchAsync([1f, 0f, 0f], topK: 2);
+        var results = await store.SearchAsync((float[])[1f, 0f, 0f], topK: 2);
 
         Assert.Equal(2, results.Count);
         Assert.Equal("vec1", results[0].Id);
@@ -563,11 +537,11 @@ public class AgentBuilderTests
         var store = new InMemoryVectorStore(dimensions: 2);
         await store.InitializeAsync();
 
-        await store.UpsertAsync("a", [1f, 0f]);
-        await store.UpsertAsync("b", [0.9f, 0.1f]);
-        await store.UpsertAsync("c", [0f, 1f]);
+        await store.UpsertAsync("a", (float[])[1f, 0f]);
+        await store.UpsertAsync("b", (float[])[0.9f, 0.1f]);
+        await store.UpsertAsync("c", (float[])[0f, 1f]);
 
-        var results = await store.SearchAsync([1f, 0f], topK: 2);
+        var results = await store.SearchAsync((float[])[1f, 0f], topK: 2);
 
         Assert.Equal("a", results[0].Id);
         Assert.Equal("b", results[1].Id);
@@ -580,10 +554,10 @@ public class AgentBuilderTests
         var store = new InMemoryVectorStore(dimensions: 3);
         await store.InitializeAsync();
 
-        await store.UpsertAsync("vec1", [1f, 0f, 0f]);
+        await store.UpsertAsync("vec1", (float[])[1f, 0f, 0f]);
         await store.DeleteAsync("vec1");
 
-        var results = await store.SearchAsync([1f, 0f, 0f], topK: 5);
+        var results = await store.SearchAsync((float[])[1f, 0f, 0f], topK: 5);
 
         Assert.Empty(results);
     }
@@ -594,11 +568,11 @@ public class AgentBuilderTests
         var store = new InMemoryVectorStore(dimensions: 3);
         await store.InitializeAsync();
 
-        await store.UpsertAsync("vec1", [1f, 0f, 0f]);
-        await store.UpsertAsync("vec2", [0f, 1f, 0f]);
+        await store.UpsertAsync("vec1", (float[])[1f, 0f, 0f]);
+        await store.UpsertAsync("vec2", (float[])[0f, 1f, 0f]);
         await store.DeleteAllAsync();
 
-        var results = await store.SearchAsync([1f, 0f, 0f], topK: 5);
+        var results = await store.SearchAsync((float[])[1f, 0f, 0f], topK: 5);
 
         Assert.Empty(results);
     }
@@ -609,8 +583,8 @@ public class AgentBuilderTests
         var store = new InMemoryVectorStore(dimensions: 3);
         await store.InitializeAsync();
 
-        await Assert.ThrowsAsync<ArgumentException>(() => store.UpsertAsync("vec", [1f, 2f]));
-        await Assert.ThrowsAsync<ArgumentException>(() => store.SearchAsync([1f, 2f], topK: 5));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.UpsertAsync("vec", (float[])[1f, 2f]));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SearchAsync((float[])[1f, 2f], topK: 5));
     }
 
     [Fact]
@@ -624,9 +598,9 @@ public class AgentBuilderTests
             await sqlite.InitializeAsync();
 
             await sqlite.StoreMessageAsync("1", "hello world");
-            await sqlite.StoreEmbeddingAsync("1", [1f, 0f, 0f]);
+            await sqlite.StoreEmbeddingAsync("1", (float[])[1f, 0f, 0f]);
 
-            var results = await sqlite.RetrieveSimilarAsync([1f, 0f, 0f], topK: 5);
+            var results = await sqlite.RetrieveSimilarAsync((float[])[1f, 0f, 0f], topK: 5);
 
             Assert.Single(results);
             Assert.Equal("hello world", results[0].Content);
@@ -648,11 +622,11 @@ public class AgentBuilderTests
             await sqlite.InitializeAsync();
 
             await sqlite.StoreMessageAsync("1", "I love programming in C#");
-            await sqlite.StoreEmbeddingAsync("1", [1f, 0.5f, 0.2f]);
+            await sqlite.StoreEmbeddingAsync("1", (float[])[1f, 0.5f, 0.2f]);
             await sqlite.StoreMessageAsync("2", "What's the weather today?");
-            await sqlite.StoreEmbeddingAsync("2", [0f, 0f, 1f]);
+            await sqlite.StoreEmbeddingAsync("2", (float[])[0f, 0f, 1f]);
 
-            var results = await sqlite.RetrieveSimilarAsync([0.9f, 0.5f, 0.2f], topK: 1);
+            var results = await sqlite.RetrieveSimilarAsync((float[])[0.9f, 0.5f, 0.2f], topK: 1);
 
             Assert.Single(results);
             Assert.Contains("C#", results[0].Content);
@@ -666,14 +640,13 @@ public class AgentBuilderTests
     [Fact]
     public async Task AgentBuilder_with_vector_store_creates_memory_middleware_with_embedding_provider()
     {
-        var apiKey = "test-key";
-        var embeddingProvider = new Agentic.Providers.OpenAi.OpenAiEmbeddingProvider(apiKey);
-        var vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+        var embeddingGenerator = new FakeEmbeddingGenerator(1536);
+        var vectorStore = new InMemoryVectorStore(dimensions: 1536);
 
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+            .WithChatClient(new FakeChatClient(new TestAgentModel()))
             .WithMemory(new InMemoryMemoryService())
-            .WithEmbeddingProvider(embeddingProvider)
+            .WithEmbeddingGenerator(embeddingGenerator)
             .WithVectorStore(vectorStore)
             .Build();
 
@@ -687,7 +660,7 @@ public class AgentBuilderTests
         var vectorStore = new InMemoryVectorStore(dimensions: 1536);
 
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+            .WithChatClient(new FakeChatClient(new TestAgentModel()))
             .WithVectorStore(vectorStore)
             .Build();
 
@@ -891,7 +864,7 @@ description: A test skill.
 # Instructions");
 
             var assistant = new AgentBuilder()
-                .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+                .WithChatClient(new FakeChatClient(new TestAgentModel()))
                 .WithSkills(tempDir)
                 .Build();
 
@@ -911,7 +884,7 @@ description: A test skill.
     public async Task Agent_with_no_skills_has_null_skills()
     {
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+            .WithChatClient(new FakeChatClient(new TestAgentModel()))
             .Build();
 
         await assistant.InitializeAsync();
@@ -1066,7 +1039,7 @@ Test role");
 You are a helpful assistant.");
 
             var assistant = new AgentBuilder()
-                .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+                .WithChatClient(new FakeChatClient(new TestAgentModel()))
                 .WithSoul(soulPath)
                 .Build();
 
@@ -1086,7 +1059,7 @@ You are a helpful assistant.");
     public async Task Agent_with_no_soul_has_null_soul()
     {
         var assistant = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+            .WithChatClient(new FakeChatClient(new TestAgentModel()))
             .Build();
 
         await assistant.InitializeAsync();
@@ -1109,7 +1082,7 @@ You are a helpful test bot.");
 
             IReadOnlyList<ChatMessage>? captured = null;
             var assistant = new AgentBuilder()
-                .WithModelProvider(new FakeModelProvider(new CaptureModel(messages =>
+                .WithChatClient(new FakeChatClient(new CaptureModel(messages =>
                 {
                     captured = messages;
                     return new AgentResponse("ok");
@@ -1148,7 +1121,7 @@ Step 1.");
 
             IReadOnlyList<ChatMessage>? captured = null;
             var assistant = new AgentBuilder()
-                .WithModelProvider(new FakeModelProvider(new CaptureModel(messages =>
+                .WithChatClient(new FakeChatClient(new CaptureModel(messages =>
                 {
                     captured = messages;
                     return new AgentResponse("ok");
@@ -1194,7 +1167,7 @@ description: A combo skill.
 
             IReadOnlyList<ChatMessage>? captured = null;
             var assistant = new AgentBuilder()
-                .WithModelProvider(new FakeModelProvider(new CaptureModel(messages =>
+                .WithChatClient(new FakeChatClient(new CaptureModel(messages =>
                 {
                     captured = messages;
                     return new AgentResponse("ok");
@@ -1226,11 +1199,11 @@ description: A combo skill.
 
         // Fire 50 concurrent upserts — would corrupt a plain Dictionary
         var tasks = Enumerable.Range(0, 50).Select(i =>
-            store.UpsertAsync($"vec{i}", [i * 0.01f, 0f, 0f]));
+            store.UpsertAsync($"vec{i}", new float[] { i * 0.01f, 0f, 0f }));
 
         await Task.WhenAll(tasks);
 
-        var results = await store.SearchAsync([0.5f, 0f, 0f], topK: 50);
+        var results = await store.SearchAsync((float[])[0.5f, 0f, 0f], topK: 50);
         Assert.Equal(50, results.Count);
     }
 
@@ -1249,7 +1222,7 @@ You are a learning bot.");
 
             var callbackInputs = new List<string>();
             var assistant = new AgentBuilder()
-                .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+                .WithChatClient(new FakeChatClient(new TestAgentModel()))
                 .WithSoul(soulPath)
                 .WithSoulLearning((userInput, agentReply, soul) =>
                 {
@@ -1285,7 +1258,7 @@ You are a learning bot.");
 You are a stable bot.");
 
             var assistant = new AgentBuilder()
-                .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+                .WithChatClient(new FakeChatClient(new TestAgentModel()))
                 .WithSoul(soulPath)
                 .WithSoulLearning((_, _, soul) => null)
                 .Build();
@@ -1320,7 +1293,7 @@ Original role.");
             var callCount = 0;
 
             var assistant = new AgentBuilder()
-                .WithModelProvider(new FakeModelProvider(new CaptureModel(messages =>
+                .WithChatClient(new FakeChatClient(new CaptureModel(messages =>
                 {
                     callCount++;
                     if (callCount == 2)
@@ -1363,7 +1336,7 @@ Original role.");
 Original role.");
 
             var assistant = new AgentBuilder()
-                .WithModelProvider(new FakeModelProvider(new TestAgentModel()))
+                .WithChatClient(new FakeChatClient(new TestAgentModel()))
                 .WithSoul(soulPath)
                 .WithSoulLearning((_, _, soul) =>
                     soul with { Role = "Persisted updated role." })

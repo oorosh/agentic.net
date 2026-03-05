@@ -78,7 +78,7 @@ if (HasExcessiveRepetition(content))
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .UseMiddleware(new ResponseValidationMiddleware())
     .Build();
 
@@ -176,7 +176,7 @@ The full middleware stack should look like:
 
 ```csharp
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     
     // 1. SECURITY GATES (fail fast)
     .UseMiddleware(new RateLimitingMiddleware())

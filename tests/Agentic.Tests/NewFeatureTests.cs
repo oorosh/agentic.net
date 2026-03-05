@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
 using Agentic.Tests.Fakes;
 using Xunit;
 
@@ -14,8 +13,6 @@ namespace Agentic.Tests;
 
 /// <summary>
 /// Tests for features added in the most recent batch of improvements:
-/// - OpenAiEmbeddingProvider custom-dimension constructor and unknown-model guard
-/// - AgentBuilder.WithOpenAiEmbeddings convenience method
 /// - IMemoryService.DeleteMessageAsync and ClearAsync (InMemory + Sqlite)
 /// - ToolParameterBinder string-array round-trip
 /// - IAgent interface is implemented by Agent
@@ -24,91 +21,6 @@ namespace Agentic.Tests;
 /// </summary>
 public sealed class NewFeatureTests
 {
-    // -----------------------------------------------------------------------
-    // OpenAiEmbeddingProvider
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public void OpenAiEmbeddingProvider_custom_dimensions_constructor_sets_dimensions()
-    {
-        var provider = new OpenAiEmbeddingProvider("key", "my-custom-model", 768);
-        Assert.Equal(768, provider.Dimensions);
-    }
-
-    [Fact]
-    public void OpenAiEmbeddingProvider_unknown_model_throws_InvalidOperationException()
-    {
-        var provider = new OpenAiEmbeddingProvider("key", "unknown-embedding-model-xyz");
-        Assert.Throws<InvalidOperationException>(() => _ = provider.Dimensions);
-    }
-
-    [Fact]
-    public void OpenAiEmbeddingProvider_known_model_small_returns_1536()
-    {
-        var provider = new OpenAiEmbeddingProvider("key", "text-embedding-3-small");
-        Assert.Equal(1536, provider.Dimensions);
-    }
-
-    [Fact]
-    public void OpenAiEmbeddingProvider_known_model_large_returns_3072()
-    {
-        var provider = new OpenAiEmbeddingProvider("key", "text-embedding-3-large");
-        Assert.Equal(3072, provider.Dimensions);
-    }
-
-    [Fact]
-    public void OpenAiEmbeddingProvider_custom_constructor_validates_empty_apiKey()
-    {
-        Assert.Throws<ArgumentException>(() =>
-            new OpenAiEmbeddingProvider("", "model", 512));
-    }
-
-    [Fact]
-    public void OpenAiEmbeddingProvider_custom_constructor_validates_negative_dimensions()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new OpenAiEmbeddingProvider("key", "model", -1));
-    }
-
-    [Fact]
-    public void OpenAiEmbeddingProvider_custom_constructor_validates_zero_dimensions()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new OpenAiEmbeddingProvider("key", "model", 0));
-    }
-
-    // -----------------------------------------------------------------------
-    // AgentBuilder.WithOpenAiEmbeddings
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public async Task AgentBuilder_WithOpenAiEmbeddings_registers_embedding_provider()
-    {
-        var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoAgentModel()))
-            .WithOpenAiEmbeddings("test-key")
-            .Build();
-
-        // Agent builds and initializes without error
-        await agent.InitializeAsync();
-        Assert.NotNull(agent);
-    }
-
-    [Fact]
-    public async Task AgentBuilder_WithOpenAiEmbeddings_custom_model()
-    {
-        var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoAgentModel()))
-            .WithOpenAiEmbeddings("test-key", "text-embedding-ada-002")
-            .Build();
-
-        await agent.InitializeAsync();
-        Assert.NotNull(agent);
-    }
-
-    // -----------------------------------------------------------------------
-    // InMemoryMemoryService — DeleteMessageAsync / ClearAsync
-    // -----------------------------------------------------------------------
 
     [Fact]
     public async Task InMemoryMemoryService_DeleteMessageAsync_removes_message_and_embedding()
@@ -118,8 +30,8 @@ public sealed class NewFeatureTests
 
         await svc.StoreMessageAsync("a", "apple");
         await svc.StoreMessageAsync("b", "banana");
-        await svc.StoreEmbeddingAsync("a", [1f, 0f]);
-        await svc.StoreEmbeddingAsync("b", [0f, 1f]);
+        await svc.StoreEmbeddingAsync("a", (float[])[1f, 0f]);
+        await svc.StoreEmbeddingAsync("b", (float[])[0f, 1f]);
 
         await svc.DeleteMessageAsync("a");
 
@@ -128,7 +40,7 @@ public sealed class NewFeatureTests
         Assert.Equal("banana", results[0]);
 
         // Embedding for "a" should no longer participate in similarity search
-        var similar = await svc.RetrieveSimilarAsync([1f, 0f], topK: 10);
+        var similar = await svc.RetrieveSimilarAsync((float[])[1f, 0f], topK: 10);
         // Only "banana" (id "b") remains; it has near-zero cosine similarity to [1,0] but is still returned
         Assert.DoesNotContain(similar, r => r.Content == "apple");
     }
@@ -141,14 +53,14 @@ public sealed class NewFeatureTests
 
         await svc.StoreMessageAsync("1", "first");
         await svc.StoreMessageAsync("2", "second");
-        await svc.StoreEmbeddingAsync("1", [1f, 0f]);
+        await svc.StoreEmbeddingAsync("1", (float[])[1f, 0f]);
 
         await svc.ClearAsync();
 
         var results = await svc.RetrieveRelevantAsync("", topK: 10);
         Assert.Empty(results);
 
-        var similar = await svc.RetrieveSimilarAsync([1f, 0f], topK: 10);
+        var similar = await svc.RetrieveSimilarAsync((float[])[1f, 0f], topK: 10);
         Assert.Empty(similar);
     }
 
@@ -300,7 +212,7 @@ public sealed class NewFeatureTests
     public void Agent_implements_IAgent_interface()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoAgentModel()))
+            .WithChatClient(new FakeChatClient(new EchoAgentModel()))
             .Build();
 
         Assert.IsAssignableFrom<IAgent>(agent);
@@ -314,7 +226,7 @@ public sealed class NewFeatureTests
     public async Task AgentReply_implicitly_converts_to_string()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoAgentModel()))
+            .WithChatClient(new FakeChatClient(new EchoAgentModel()))
             .Build();
 
         await agent.InitializeAsync();
@@ -329,7 +241,7 @@ public sealed class NewFeatureTests
     public async Task AgentReply_ToString_returns_content()
     {
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoAgentModel()))
+            .WithChatClient(new FakeChatClient(new EchoAgentModel()))
             .Build();
 
         await agent.InitializeAsync();

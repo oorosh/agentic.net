@@ -17,23 +17,15 @@ namespace Agentic.Tests;
 public sealed class EmbeddingProviderTests
 {
     [Fact]
-    public void OpenAiEmbeddingProvider_has_correct_dimensions()
+    public async Task Agent_with_embedding_generator_initializes()
     {
-        var provider = new Agentic.Providers.OpenAi.OpenAiEmbeddingProvider("test-key");
-        
-        Assert.Equal(1536, provider.Dimensions);
-    }
-
-    [Fact]
-    public async Task Agent_with_embedding_provider_initializes()
-    {
-        var embeddingProvider = new Agentic.Providers.OpenAi.OpenAiEmbeddingProvider("test-key");
-        var vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+        var embeddingGenerator = new FakeEmbeddingGenerator(1536);
+        var vectorStore = new InMemoryVectorStore(dimensions: 1536);
 
         var agent = new AgentBuilder()
-            .WithModelProvider(new FakeModelProvider(new EchoModel()))
+            .WithChatClient(new FakeChatClient(new EchoModel()))
             .WithMemory(new InMemoryMemoryService())
-            .WithEmbeddingProvider(embeddingProvider)
+            .WithEmbeddingGenerator(embeddingGenerator)
             .WithVectorStore(vectorStore)
             .Build();
 
@@ -49,15 +41,15 @@ public sealed class EmbeddingProviderTests
         await store.InitializeAsync();
 
         // Perfect match
-        await store.UpsertAsync("exact", [1f, 0f, 0f]);
+        await store.UpsertAsync("exact", (float[])[1f, 0f, 0f]);
         
         // 45 degrees apart (higher similarity than perpendicular)
-        await store.UpsertAsync("partial", [0.707f, 0.707f, 0f]);
+        await store.UpsertAsync("partial", (float[])[0.707f, 0.707f, 0f]);
         
         // 90 degrees apart (perpendicular, zero similarity)
-        await store.UpsertAsync("perpendicular", [0f, 1f, 0f]);
+        await store.UpsertAsync("perpendicular", (float[])[0f, 1f, 0f]);
 
-        var results = await store.SearchAsync([1f, 0f, 0f], topK: 3);
+        var results = await store.SearchAsync((float[])[1f, 0f, 0f], topK: 3);
 
         Assert.Equal(3, results.Count);
         Assert.Equal("exact", results[0].Id);
@@ -81,9 +73,9 @@ public sealed class EmbeddingProviderTests
         await store.InitializeAsync();
 
         // This might be an edge case depending on implementation
-        await store.UpsertAsync("normal", [1f, 0f]);
+        await store.UpsertAsync("normal", (float[])[1f, 0f]);
         
-        var results = await store.SearchAsync([0f, 0f], topK: 5);
+        var results = await store.SearchAsync((float[])[0f, 0f], topK: 5);
         
         // Should return results (behavior depends on implementation)
         Assert.NotNull(results);
@@ -95,13 +87,13 @@ public sealed class EmbeddingProviderTests
         var store = new InMemoryVectorStore(dimensions: 2);
         await store.InitializeAsync();
 
-        await store.UpsertAsync("id1", [1f, 0f]);
-        var results1 = await store.SearchAsync([1f, 0f], topK: 5);
+        await store.UpsertAsync("id1", (float[])[1f, 0f]);
+        var results1 = await store.SearchAsync((float[])[1f, 0f], topK: 5);
         Assert.Single(results1);
 
         // Upsert same ID with different vector
-        await store.UpsertAsync("id1", [0f, 1f]);
-        var results2 = await store.SearchAsync([0f, 1f], topK: 5);
+        await store.UpsertAsync("id1", (float[])[0f, 1f]);
+        var results2 = await store.SearchAsync((float[])[0f, 1f], topK: 5);
         
         Assert.Single(results2);
         Assert.Equal("id1", results2[0].Id);
@@ -113,12 +105,12 @@ public sealed class EmbeddingProviderTests
         var store = new InMemoryVectorStore(dimensions: 2);
         await store.InitializeAsync();
 
-        await store.UpsertAsync("vec1", [1f, 0f]);
-        await store.UpsertAsync("vec2", [0f, 1f]);
+        await store.UpsertAsync("vec1", (float[])[1f, 0f]);
+        await store.UpsertAsync("vec2", (float[])[0f, 1f]);
 
         await store.DeleteAsync("vec1");
 
-        var results = await store.SearchAsync([1f, 0f], topK: 5);
+        var results = await store.SearchAsync((float[])[1f, 0f], topK: 5);
         
         Assert.Single(results);
         Assert.Equal("vec2", results[0].Id);
@@ -130,7 +122,7 @@ public sealed class EmbeddingProviderTests
         var store = new InMemoryVectorStore(dimensions: 2);
         await store.InitializeAsync();
 
-        var results = await store.SearchAsync([1f, 0f], topK: 5);
+        var results = await store.SearchAsync((float[])[1f, 0f], topK: 5);
         
         Assert.Empty(results);
     }
@@ -142,11 +134,11 @@ public sealed class EmbeddingProviderTests
         await store.InitializeAsync();
 
         // Correct dimensions - should succeed
-        await store.UpsertAsync("correct", [1f, 0f, 0f]);
+        await store.UpsertAsync("correct", (float[])[1f, 0f, 0f]);
 
         // Wrong dimensions - should fail
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            store.UpsertAsync("wrong", [1f, 0f]));
+            store.UpsertAsync("wrong", (float[])[1f, 0f]));
     }
 
     [Fact]
@@ -155,11 +147,11 @@ public sealed class EmbeddingProviderTests
         var store = new InMemoryVectorStore(dimensions: 3);
         await store.InitializeAsync();
 
-        await store.UpsertAsync("vec", [1f, 0f, 0f]);
+        await store.UpsertAsync("vec", (float[])[1f, 0f, 0f]);
 
         // Wrong query dimensions - should fail
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            store.SearchAsync([1f, 0f], topK: 5));
+            store.SearchAsync((float[])[1f, 0f], topK: 5));
     }
 
     [Fact]
@@ -170,10 +162,10 @@ public sealed class EmbeddingProviderTests
 
         for (int i = 0; i < 5; i++)
         {
-            await store.UpsertAsync($"vec{i}", [1f, 0f]);
+            await store.UpsertAsync($"vec{i}", (float[])[1f, 0f]);
         }
 
-        var results = await store.SearchAsync([1f, 0f], topK: 100);
+        var results = await store.SearchAsync((float[])[1f, 0f], topK: 100);
         
         // Should only return available results
         Assert.Equal(5, results.Count);
@@ -185,9 +177,9 @@ public sealed class EmbeddingProviderTests
         var store = new InMemoryVectorStore(dimensions: 2);
         await store.InitializeAsync();
 
-        await store.UpsertAsync("vec", [1f, 0f]);
+        await store.UpsertAsync("vec", (float[])[1f, 0f]);
 
-        var results = await store.SearchAsync([1f, 0f], topK: 0);
+        var results = await store.SearchAsync((float[])[1f, 0f], topK: 0);
         
         Assert.Empty(results);
     }
@@ -203,12 +195,12 @@ public sealed class EmbeddingProviderTests
             await memory.InitializeAsync();
 
             await memory.StoreMessageAsync("1", "hello");
-            await memory.StoreEmbeddingAsync("1", [1f, 0f]);
+            await memory.StoreEmbeddingAsync("1", (float[])[1f, 0f]);
 
             await memory.StoreMessageAsync("2", "world");
-            await memory.StoreEmbeddingAsync("2", [0f, 1f]);
+            await memory.StoreEmbeddingAsync("2", (float[])[0f, 1f]);
 
-            var results = await memory.RetrieveSimilarAsync([1f, 0f], topK: 2);
+            var results = await memory.RetrieveSimilarAsync((float[])[1f, 0f], topK: 2);
 
             Assert.Equal(2, results.Count);
             Assert.Equal("hello", results[0].Content);

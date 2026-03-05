@@ -530,7 +530,7 @@ public async Task MiddlewareComposition_ExecutesInOrder()
     var log = new List<string>();
     
     var agent = new AgentBuilder()
-        .WithModelProvider(new DemoModelProvider())
+        .WithChatClient(new DemoChatClient())
         .UseMiddleware(new TestMiddleware("A", log))
         .UseMiddleware(new TestMiddleware("B", log))
         .UseMiddleware(new TestMiddleware("C", log))

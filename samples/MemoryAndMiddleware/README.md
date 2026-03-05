@@ -52,7 +52,7 @@ History:
 
 ```csharp
 var builder = new AgentBuilder()
-    .WithModelProvider(new DemoModelProvider())
+    .WithChatClient(new DemoChatClient())
     .WithMemory(new InMemoryMemoryService())
     .WithContextFactory(new DemoContextFactory())
     .WithMiddleware(new ToneMiddleware());
@@ -61,7 +61,7 @@ var builder = new AgentBuilder()
 ### Optional Embeddings Setup
 
 ```csharp
-IEmbeddingProvider? embeddingProvider = null;
+IEmbeddingGenerator<string, Embedding<float>>? embeddingGenerator = null;
 IVectorStore? vectorStore = null;
 
 var useEmbeddings = Environment.GetEnvironmentVariable("USE_EMBEDDINGS")?.ToLower() == "true";
@@ -69,23 +69,19 @@ var usePgVector = Environment.GetEnvironmentVariable("USE_PGVECTOR")?.ToLower() 
 
 if (useEmbeddings)
 {
-    embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
-    await embeddingProvider.InitializeAsync();
+    var openAiClient = new OpenAIClient(apiKey);
+    embeddingGenerator = openAiClient.AsEmbeddingGenerator<string, Embedding<float>>("text-embedding-3-small");
+    const int dimensions = 1536;
 
-    if (usePgVector)
-    {
-        vectorStore = new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
-    }
-    else
-    {
-        vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
-    }
+    vectorStore = usePgVector
+        ? new PgVectorStore(connString, dimensions)
+        : new InMemoryVectorStore(dimensions);
 }
 
-if (embeddingProvider != null)
+if (embeddingGenerator != null)
 {
     builder = builder
-        .WithEmbeddingProvider(embeddingProvider)
+        .WithEmbeddingGenerator(embeddingGenerator)
         .WithVectorStore(vectorStore!);
 }
 ```

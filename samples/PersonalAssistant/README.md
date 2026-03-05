@@ -63,31 +63,39 @@ Assistant: You mentioned that you love coffee. Is there anything else you'd like
 Pass `SqliteMemoryService` directly to `WithMemory()` — no manual initialisation needed:
 
 ```csharp
+var openAiClient = new OpenAIClient(apiKey);
+var chatClient = openAiClient.AsChatClient(model);
+
 var builder = new AgentBuilder()
-    .WithOpenAi(apiKey, model: model)
+    .WithChatClient(chatClient)
     .WithMemory(new SqliteMemoryService());
 ```
 
 ### Optional Embeddings Configuration
 
-For development, use the convenience `WithSemanticMemory()` shorthand:
+For development with in-memory vector store:
 
 ```csharp
-// Development: in-memory vector store (single call)
-builder = builder.WithSemanticMemory(apiKey);
+var embeddingGenerator = openAiClient
+    .AsEmbeddingGenerator<string, Embedding<float>>("text-embedding-3-small");
+var vectorStore = new InMemoryVectorStore(dimensions: 1536);
+
+builder = builder
+    .WithEmbeddingGenerator(embeddingGenerator)
+    .WithVectorStore(vectorStore);
 ```
 
 For production with pgvector:
 
 ```csharp
-var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
-await embeddingProvider.InitializeAsync();
-var vectorStore = new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
+var embeddingGenerator = openAiClient
+    .AsEmbeddingGenerator<string, Embedding<float>>("text-embedding-3-small");
+var vectorStore = new PgVectorStore(connString, dimensions: 1536);
 
 builder = builder
-    .WithMemory(new SqliteMemoryService(vectorStore))
-    .WithEmbeddingProvider(embeddingProvider)
-    .WithVectorStore(vectorStore);
+    .WithEmbeddingGenerator(embeddingGenerator)
+    .WithVectorStore(vectorStore)
+    .WithMemory("memory.db", vectorStore);
 ```
 
 ### Agent Configuration
@@ -105,7 +113,7 @@ You can configure skills and SOUL.md identity using individual methods or a sing
 ```csharp
 // Load from default paths (./skills/ and ./SOUL.md in app directory)
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithMemory(memoryService)
     .WithSkills()
     .WithSoul()
@@ -113,7 +121,7 @@ var agent = new AgentBuilder()
 
 // Or specify custom paths
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(chatClient)
     .WithMemory(memoryService)
     .WithSkills("./skills")   // load agent skills
     .WithSoul("./SOUL.md")    // load agent identity

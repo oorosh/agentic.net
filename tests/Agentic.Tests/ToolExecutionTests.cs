@@ -25,7 +25,7 @@ public sealed class ToolExecutionTests
                 Task.FromResult($"Hello, {args}!")));
 
         var agent = new AgentBuilder()
-            .WithModelProvider(provider)
+            .WithChatClient(provider)
             .WithTool(provider.Tool)
             .Build();
 
@@ -51,9 +51,9 @@ public sealed class ToolExecutionTests
             return Task.FromResult(product.ToString());
         });
 
-        var provider = new FakeModelProvider(new TestAgentModel());
+        var provider = new FakeChatClient(new TestAgentModel());
         var agent = new AgentBuilder()
-            .WithModelProvider(provider)
+            .WithChatClient(provider)
             .WithTool(tool1)
             .Build();
 
@@ -185,7 +185,7 @@ public sealed class ToolExecutionTests
             => FakeModelStreamHelper.StreamFromCompleteAsync(this, messages, cancellationToken);
     }
 
-    private sealed class TestToolModelProvider : IModelProvider
+    private sealed class TestToolModelProvider : Microsoft.Extensions.AI.IChatClient
     {
         private readonly IAgentModel _model;
         public ITool Tool { get; }
@@ -196,6 +196,58 @@ public sealed class ToolExecutionTests
             Tool = tool;
         }
 
-        public IAgentModel CreateModel() => _model;
+        public Microsoft.Extensions.AI.ChatClientMetadata Metadata => new("test-tool", null, null);
+
+        public async Task<Microsoft.Extensions.AI.ChatResponse> GetResponseAsync(
+            IEnumerable<Microsoft.Extensions.AI.ChatMessage> messages,
+            Microsoft.Extensions.AI.ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            var agenticMessages = messages.Select(m =>
+            {
+                if (m.Role == Microsoft.Extensions.AI.ChatRole.Tool)
+                {
+                    var funcResult = m.Contents
+                        .OfType<Microsoft.Extensions.AI.FunctionResultContent>()
+                        .FirstOrDefault();
+                    var content = funcResult?.Result?.ToString() ?? m.Text ?? string.Empty;
+                    return new ChatMessage(ChatRole.Tool, content);
+                }
+                var role = m.Role == Microsoft.Extensions.AI.ChatRole.User ? ChatRole.User :
+                    m.Role == Microsoft.Extensions.AI.ChatRole.System ? ChatRole.System :
+                    m.Role == Microsoft.Extensions.AI.ChatRole.Tool ? ChatRole.Tool : ChatRole.Assistant;
+                return new ChatMessage(role, m.Text ?? string.Empty);
+            }).ToList();
+            var r = await _model.CompleteAsync(agenticMessages, cancellationToken);
+
+            List<Microsoft.Extensions.AI.AIContent> contents = [];
+            if (!string.IsNullOrEmpty(r.Content))
+                contents.Add(new Microsoft.Extensions.AI.TextContent(r.Content));
+
+            if (r.ToolCalls is { Count: > 0 } calls)
+            {
+                foreach (var call in calls)
+                {
+                    var args = new Dictionary<string, object?> { ["_raw"] = call.Arguments };
+                    contents.Add(new Microsoft.Extensions.AI.FunctionCallContent(
+                        call.ToolCallId ?? Guid.NewGuid().ToString(),
+                        call.Name,
+                        args));
+                }
+            }
+
+            var chatMsg = new Microsoft.Extensions.AI.ChatMessage(
+                Microsoft.Extensions.AI.ChatRole.Assistant, contents);
+            return new Microsoft.Extensions.AI.ChatResponse(chatMsg);
+        }
+
+        public IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<Microsoft.Extensions.AI.ChatMessage> messages,
+            Microsoft.Extensions.AI.ChatOptions? options = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+        public void Dispose() { }
     }
 }
