@@ -3,13 +3,15 @@ using Agentic.Builder;
 using Agentic.Core;
 using Agentic.Middleware;
 using Agentic.Stores;
+using Microsoft.Extensions.AI;
+using MEAI = Microsoft.Extensions.AI;
 
 // MemoryAndMiddleware sample: demonstrates memory services and custom middleware.
 // Now supports embeddings for semantic memory retrieval (set OPENAI_API_KEY and USE_EMBEDDINGS=true).
 // For production with larger datasets, use WithVectorStore() with PgVectorStore.
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-IEmbeddingProvider? embeddingProvider = null;
+MEAI.IEmbeddingGenerator<string, MEAI.Embedding<float>>? embeddingGenerator = null;
 IVectorStore? vectorStore = null;
 
 var useEmbeddings = Environment.GetEnvironmentVariable("USE_EMBEDDINGS")?.ToLower() == "true";
@@ -17,8 +19,7 @@ var usePgVector = Environment.GetEnvironmentVariable("USE_PGVECTOR")?.ToLower() 
 
 if (!string.IsNullOrWhiteSpace(apiKey) && useEmbeddings)
 {
-    embeddingProvider = new Agentic.Providers.OpenAi.OpenAiEmbeddingProvider(apiKey);
-    await embeddingProvider.InitializeAsync();
+    embeddingGenerator = new OpenAI.Embeddings.EmbeddingClient("text-embedding-3-small", apiKey).AsIEmbeddingGenerator();
 
     // Use pgvector for production (requires PostgreSQL with pgvector extension)
     // Set USE_PGVECTOR=true and PGVECTOR_CONNECTION_STRING environment variables
@@ -27,27 +28,27 @@ if (!string.IsNullOrWhiteSpace(apiKey) && useEmbeddings)
         var connString = Environment.GetEnvironmentVariable("PGVECTOR_CONNECTION_STRING");
         if (!string.IsNullOrWhiteSpace(connString))
         {
-            vectorStore = new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
+            vectorStore = new PgVectorStore(connString, dimensions: 1536);
             Console.WriteLine("(using pgvector for semantic memory)");
         }
     }
     else
     {
         // Use in-memory vector store for development/testing
-        vectorStore = new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions);
+        vectorStore = new InMemoryVectorStore(dimensions: 1536);
     }
 }
 
 var builder = new AgentBuilder()
-    .WithModelProvider(new DemoModelProvider())
+    .WithChatClient(new DemoChatClient())
     .WithMemory(new InMemoryMemoryService())
     .WithContextFactory(new DemoContextFactory())
     .WithMiddleware(new ToneMiddleware());
 
-if (embeddingProvider != null)
+if (embeddingGenerator != null)
 {
     builder = builder
-        .WithEmbeddingProvider(embeddingProvider)
+        .WithEmbeddingGenerator(embeddingGenerator!)
         .WithVectorStore(vectorStore!);
 }
 
@@ -67,42 +68,39 @@ foreach (var message in assistant.History)
     Console.WriteLine($"- {message.Role}: {message.Content}");
 }
 
-public sealed class DemoModelProvider : IModelProvider
+public sealed class DemoChatClient : MEAI.IChatClient
 {
-    public IAgentModel CreateModel() => new DemoModel();
-}
+    public MEAI.ChatClientMetadata Metadata => new("demo", null, null);
 
-public sealed class DemoModel : IAgentModel
-{
-    public Task<AgentResponse> CompleteAsync(
-        IReadOnlyList<ChatMessage> messages,
+    public Task<MEAI.ChatResponse> GetResponseAsync(
+        IEnumerable<MEAI.ChatMessage> messages,
+        MEAI.ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var systemContext = messages
-            .Where(m => m.Role == ChatRole.System)
-            .Select(m => m.Content)
-            .ToList();
-
-        var lastUserMessage = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Content ?? string.Empty;
-
-        if (lastUserMessage.Contains("favorite language", StringComparison.OrdinalIgnoreCase)
-            && systemContext.Any(ctx => ctx.Contains("C#", StringComparison.OrdinalIgnoreCase)))
-        {
-            return Task.FromResult(new AgentResponse("Your favorite language is C#."));
-        }
-
-        return Task.FromResult(new AgentResponse($"I noted: {lastUserMessage}"));
+        var list = messages.ToList();
+        var last = list.LastOrDefault(m => m.Role == MEAI.ChatRole.User)?.Text ?? "";
+        var systemCtx = list.Where(m => m.Role == MEAI.ChatRole.System).Select(m => m.Text ?? "").ToList();
+        string content;
+        if (last.Contains("favorite language", StringComparison.OrdinalIgnoreCase)
+            && systemCtx.Any(ctx => ctx.Contains("C#", StringComparison.OrdinalIgnoreCase)))
+            content = "Your favorite language is C#.";
+        else
+            content = $"I noted: {last}";
+        return Task.FromResult(new MEAI.ChatResponse(new MEAI.ChatMessage(MEAI.ChatRole.Assistant, content)));
     }
 
-    public async IAsyncEnumerable<StreamingToken> StreamAsync(
-        IReadOnlyList<ChatMessage> messages,
+    public async IAsyncEnumerable<MEAI.ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<MEAI.ChatMessage> messages,
+        MEAI.ChatOptions? options = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var response = await CompleteAsync(messages, cancellationToken);
-        if (!string.IsNullOrEmpty(response.Content))
-            yield return new StreamingToken(response.Content, IsComplete: false);
-        yield return new StreamingToken(string.Empty, IsComplete: true);
+        var response = await GetResponseAsync(messages, options, cancellationToken);
+        yield return new MEAI.ChatResponseUpdate(MEAI.ChatRole.Assistant, response.Text);
+        yield return new MEAI.ChatResponseUpdate { FinishReason = MEAI.ChatFinishReason.Stop };
     }
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+    public void Dispose() { }
 }
 
 public sealed class ToneMiddleware : IAssistantMiddleware
@@ -112,17 +110,17 @@ public sealed class ToneMiddleware : IAssistantMiddleware
         AgentHandler next,
         CancellationToken cancellationToken = default)
     {
-        context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, "Keep responses concise and friendly."));
+        context.WorkingMessages.Insert(0, new Agentic.Core.ChatMessage(Agentic.Core.ChatRole.System, "Keep responses concise and friendly."));
         return await next(context, cancellationToken);
     }
 }
 
 public sealed class DemoContextFactory : IAssistantContextFactory
 {
-    public AgentContext Create(string input, IReadOnlyList<ChatMessage> history)
+    public AgentContext Create(string input, IReadOnlyList<Agentic.Core.ChatMessage> history)
     {
         var context = new AgentContext(input, history);
-        context.WorkingMessages.Insert(0, new ChatMessage(ChatRole.System, "ContextFactory: include memory-aware behavior."));
+        context.WorkingMessages.Insert(0, new Agentic.Core.ChatMessage(Agentic.Core.ChatRole.System, "ContextFactory: include memory-aware behavior."));
         return context;
     }
 }

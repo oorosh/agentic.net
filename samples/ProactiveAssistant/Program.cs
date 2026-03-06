@@ -1,7 +1,7 @@
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
+using Microsoft.Extensions.AI;
 
 // ProactiveAssistant sample: demonstrates the heartbeat feature — an agent that
 // wakes up on a schedule, checks HEARTBEAT.md for tasks, and acts proactively.
@@ -21,7 +21,7 @@ if (string.IsNullOrWhiteSpace(apiKey))
     return;
 }
 
-var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
+var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
 var heartbeatFile = Environment.GetEnvironmentVariable("HEARTBEAT_FILE") ?? "./HEARTBEAT.md";
 
 int? quietStart = null;
@@ -32,7 +32,7 @@ if (int.TryParse(Environment.GetEnvironmentVariable("QUIET_END"), out var qe)) q
 // Build the agent with a 30-second heartbeat interval for demo purposes.
 // In production you would use TimeSpan.FromMinutes(5) or longer.
 var assistant = new AgentBuilder()
-    .WithOpenAi(apiKey, model: model)
+    .WithChatClient(new OpenAI.Chat.ChatClient(model, apiKey).AsIChatClient())
     .WithHeartbeat(options =>
     {
         options.Interval = TimeSpan.FromSeconds(30);
@@ -83,7 +83,7 @@ var chatTask = Task.Run(async () =>
             continue;
 
         var reply = await assistant.ReplyAsync(input, cts.Token);
-        Console.WriteLine($"Assistant: {reply.Content}\n");
+        Console.WriteLine($"Assistant: {reply}\n");
     }
 }, cts.Token);
 

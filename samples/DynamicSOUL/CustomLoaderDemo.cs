@@ -57,7 +57,7 @@ public sealed class DatabaseSoulLoader : ISoulLoader
 // Usage:
 var loader = new DatabaseSoulLoader("Server=localhost");
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini"))
     .WithSoul(loader)
     .Build();
 """;
@@ -142,7 +142,7 @@ public class MyApplication
         var soulLoader = new DatabaseSoulLoader(connectionString);
         
         var agent = new AgentBuilder()
-            .WithOpenAi(apiKey)
+            .WithChatClient(new OpenAIClient(apiKey).AsChatClient("gpt-4o-mini"))
             .WithSoul(soulLoader)
             .Build();
         

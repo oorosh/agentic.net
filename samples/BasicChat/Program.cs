@@ -1,9 +1,8 @@
-using Agentic.Abstractions;
 using Agentic.Builder;
-using Agentic.Core;
+using Microsoft.Extensions.AI;
 
 var assistant = new AgentBuilder()
-    .WithModelProvider(new DemoModelProvider())
+    .WithChatClient(new DemoChatClient())
     .Build();
 
 Console.WriteLine("== Basic Chat Sample ==");
@@ -28,28 +27,29 @@ while (true)
     Console.WriteLine($"Assistant: {reply}\n");
 }
 
-public sealed class DemoModelProvider : IModelProvider
+public sealed class DemoChatClient : IChatClient
 {
-    public IAgentModel CreateModel() => new EchoModel();
-}
+    public ChatClientMetadata Metadata => new("demo", null, null);
 
-public sealed class EchoModel : IAgentModel
-{
-    public Task<AgentResponse> CompleteAsync(
-        IReadOnlyList<ChatMessage> messages,
+    public Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var lastUserMessage = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Content ?? string.Empty;
-        return Task.FromResult(new AgentResponse($"Echo: {lastUserMessage}"));
+        var last = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text ?? "";
+        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, $"Echo: {last}")));
     }
 
-    public async IAsyncEnumerable<StreamingToken> StreamAsync(
-        IReadOnlyList<ChatMessage> messages,
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var response = await CompleteAsync(messages, cancellationToken);
-        if (!string.IsNullOrEmpty(response.Content))
-            yield return new StreamingToken(response.Content, IsComplete: false);
-        yield return new StreamingToken(string.Empty, IsComplete: true);
+        var last = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text ?? "";
+        yield return new ChatResponseUpdate(ChatRole.Assistant, $"Echo: {last}");
+        yield return new ChatResponseUpdate { FinishReason = ChatFinishReason.Stop };
     }
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+    public void Dispose() { }
 }

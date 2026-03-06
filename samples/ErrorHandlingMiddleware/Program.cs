@@ -1,7 +1,7 @@
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
 using ErrorHandlingMiddlewareSample;
+using Microsoft.Extensions.AI;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 if (string.IsNullOrEmpty(apiKey))
@@ -17,9 +17,9 @@ Console.WriteLine("╚═══════════════════�
 
 // Create an agent with error handling and timeout middleware
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .UseMiddleware(new ErrorHandlingMiddleware())
-    .UseMiddleware(new TimeoutMiddleware(TimeSpan.FromSeconds(30)))
+    .WithChatClient(new OpenAI.Chat.ChatClient("gpt-4o-mini", apiKey).AsIChatClient())
+    .WithMiddleware(new ErrorHandlingMiddleware())
+    .WithMiddleware(new TimeoutMiddleware(TimeSpan.FromSeconds(30)))
     .Build();
 
 await agent.InitializeAsync();

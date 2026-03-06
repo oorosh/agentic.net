@@ -172,16 +172,6 @@ public sealed class AgentBuilder
     }
 
     /// <summary>
-    /// Adds a middleware to the pipeline.
-    /// </summary>
-    [Obsolete("Use WithMiddleware instead.")]
-    public AgentBuilder UseMiddleware(IAssistantMiddleware middleware)
-    {
-        _middlewares.Add(middleware);
-        return this;
-    }
-
-    /// <summary>
     /// Registers a tool the model can invoke during a conversation.
     /// </summary>
     public AgentBuilder WithTool(ITool tool)

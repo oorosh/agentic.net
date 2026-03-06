@@ -1,7 +1,7 @@
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
 using LoggingMiddlewareSample;
+using Microsoft.Extensions.AI;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 if (string.IsNullOrEmpty(apiKey))
@@ -17,8 +17,8 @@ Console.WriteLine("╚═══════════════════�
 
 // Create an agent with logging middleware
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .UseMiddleware(new LoggingMiddleware())
+    .WithChatClient(new OpenAI.Chat.ChatClient("gpt-4o-mini", apiKey).AsIChatClient())
+    .WithMiddleware(new LoggingMiddleware())
     .Build();
 
 await agent.InitializeAsync();

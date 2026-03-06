@@ -10,7 +10,7 @@
     <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/$(TargetFramework)/</IntermediateOutputPath>
     <IsPackable>true</IsPackable>
     <!-- use a prerelease version to keep the package in "preview" state -->
-    <Version>0.2.0-preview</Version>
+    <Version>0.2.1-preview</Version>
     <Authors>Uros Biberdzic</Authors>
     <Description>Create AI assistants in .NET with pluggable models, memory, middleware, and tools.</Description>
     <PackageProjectUrl>https://github.com/oorosh/agentic.net</PackageProjectUrl>

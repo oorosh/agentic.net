@@ -1,7 +1,7 @@
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
+using Microsoft.Extensions.AI;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 if (string.IsNullOrWhiteSpace(apiKey))
@@ -10,10 +10,10 @@ if (string.IsNullOrWhiteSpace(apiKey))
     return;
 }
 
-var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
+var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
 
 var assistant = new AgentBuilder()
-    .WithOpenAi(apiKey, model)
+    .WithChatClient(new OpenAI.Chat.ChatClient(model, apiKey).AsIChatClient())
     .WithTool(new CalculatorTool())
     .WithTool(new HotelSearchTool())
     .WithTool(new HotelBookingTool())

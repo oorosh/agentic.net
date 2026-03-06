@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Agentic.NET/Agentic.NET.csproj" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.3.0" />
   </ItemGroup>
 
 </Project>

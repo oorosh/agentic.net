@@ -1,12 +1,11 @@
-using Agentic.Abstractions;
 using Agentic.Builder;
-using Agentic.Core;
 using Agentic.Middleware;
+using Microsoft.Extensions.AI;
 
 var assistant = new AgentBuilder()
-    .WithModelProvider(new DemoModelProvider())
-    .UseMiddleware(new SafeguardMiddleware.PromptGuardMiddleware())
-    .UseMiddleware(new SafeguardMiddleware.ResponseGuardMiddleware())
+    .WithChatClient(new DemoChatClient())
+    .WithMiddleware(new SafeguardMiddleware.PromptGuardMiddleware())
+    .WithMiddleware(new SafeguardMiddleware.ResponseGuardMiddleware())
     .Build();
 
 Console.WriteLine("== Safeguard Middleware Sample ==");
@@ -33,30 +32,31 @@ while (true)
     Console.WriteLine($"Assistant: {reply}\n");
 }
 
-public sealed class DemoModelProvider : IModelProvider
+public sealed class DemoChatClient : IChatClient
 {
-    public IAgentModel CreateModel() => new EchoModel();
-}
+    public ChatClientMetadata Metadata => new("demo", null, null);
 
-public sealed class EchoModel : IAgentModel
-{
-    public Task<AgentResponse> CompleteAsync(
-        IReadOnlyList<ChatMessage> messages,
+    public Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var lastUserMessage = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Content ?? string.Empty;
-        // Sometimes return content with "bad" to demonstrate response filtering
-        var response = lastUserMessage.Contains("test") ? $"This contains bad content." : $"Echo: {lastUserMessage}";
-        return Task.FromResult(new AgentResponse(response));
+        var last = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text ?? "";
+        var content = last.Contains("test") ? "This contains bad content." : $"Echo: {last}";
+        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, content)));
     }
 
-    public async IAsyncEnumerable<StreamingToken> StreamAsync(
-        IReadOnlyList<ChatMessage> messages,
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var response = await CompleteAsync(messages, cancellationToken);
-        if (!string.IsNullOrEmpty(response.Content))
-            yield return new StreamingToken(response.Content, IsComplete: false);
-        yield return new StreamingToken(string.Empty, IsComplete: true);
+        var last = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text ?? "";
+        var content = last.Contains("test") ? "This contains bad content." : $"Echo: {last}";
+        yield return new ChatResponseUpdate(ChatRole.Assistant, content);
+        yield return new ChatResponseUpdate { FinishReason = ChatFinishReason.Stop };
     }
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+    public void Dispose() { }
 }

@@ -1,6 +1,6 @@
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
+using Microsoft.Extensions.AI;
 using ResponseValidationMiddlewareSample;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
@@ -17,8 +17,8 @@ Console.WriteLine("╚═══════════════════�
 
 // Create an agent with response validation
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .UseMiddleware(new ResponseValidationMiddleware())
+    .WithChatClient(new OpenAI.Chat.ChatClient("gpt-4o-mini", apiKey).AsIChatClient())
+    .WithMiddleware(new ResponseValidationMiddleware())
     .Build();
 
 await agent.InitializeAsync();

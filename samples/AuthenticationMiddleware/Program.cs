@@ -1,7 +1,7 @@
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
 using AuthenticationMiddlewareSample;
+using Microsoft.Extensions.AI;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 if (string.IsNullOrEmpty(apiKey))
@@ -25,9 +25,9 @@ var userRoles = new Dictionary<string, string[]>
 
 // Create an agent with authentication and authorization middlewares
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .UseMiddleware(new AuthenticationMiddleware())
-    .UseMiddleware(new AuthorizationMiddleware(userRoles))
+    .WithChatClient(new OpenAI.Chat.ChatClient("gpt-4o-mini", apiKey).AsIChatClient())
+    .WithMiddleware(new AuthenticationMiddleware())
+    .WithMiddleware(new AuthorizationMiddleware(userRoles))
     .Build();
 
 await agent.InitializeAsync();

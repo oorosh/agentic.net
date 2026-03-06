@@ -1,5 +1,6 @@
 using Agentic.Builder;
 using Agentic.Loaders;
+using Microsoft.Extensions.AI;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
     ?? throw new InvalidOperationException("OPENAI_API_KEY environment variable not set");
@@ -10,7 +11,7 @@ Console.WriteLine("=== Dynamic SOUL.md Demo ===\n");
 var soulLoader = new FileSystemSoulLoader(Directory.GetCurrentDirectory());
 
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
+    .WithChatClient(new OpenAI.Chat.ChatClient("gpt-4o-mini", apiKey).AsIChatClient())
     .WithSoul(soulLoader)
     .Build();
 

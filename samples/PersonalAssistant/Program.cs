@@ -1,8 +1,8 @@
 using Agentic.Abstractions;
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
 using Agentic.Stores;
+using Microsoft.Extensions.AI;
 
 // PersonalAssistant sample: uses the OpenAI Chat Completion API as the
 // model provider and persists conversation memory into SQLite with optional
@@ -22,12 +22,12 @@ if (string.IsNullOrWhiteSpace(apiKey))
     return;
 }
 
-var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? OpenAiModels.Gpt4oMini;
+var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
 var useEmbeddings = Environment.GetEnvironmentVariable("USE_EMBEDDINGS")?.ToLower() == "true";
 var usePgVector = Environment.GetEnvironmentVariable("USE_PGVECTOR")?.ToLower() == "true";
 
 var builder = new AgentBuilder()
-    .WithOpenAi(apiKey, model: model)
+    .WithChatClient(new OpenAI.Chat.ChatClient(model, apiKey).AsIChatClient())
     .WithMemory(new SqliteMemoryService());
 
 if (useEmbeddings)
@@ -41,15 +41,14 @@ if (useEmbeddings)
             Console.WriteLine("Warning: USE_PGVECTOR=true but PGVECTOR_CONNECTION_STRING not set, falling back to in-memory vector store.");
         }
 
-        var embeddingProvider = new OpenAiEmbeddingProvider(apiKey);
-        await embeddingProvider.InitializeAsync();
+        var embeddingGenerator = new OpenAI.Embeddings.EmbeddingClient("text-embedding-3-small", apiKey).AsIEmbeddingGenerator();
         var vectorStore = string.IsNullOrWhiteSpace(connString)
-            ? (Agentic.Abstractions.IVectorStore)new InMemoryVectorStore(dimensions: embeddingProvider.Dimensions)
-            : new PgVectorStore(connString, dimensions: embeddingProvider.Dimensions);
+            ? (Agentic.Abstractions.IVectorStore)new InMemoryVectorStore(dimensions: 1536)
+            : new PgVectorStore(connString, dimensions: 1536);
 
         builder = builder
             .WithMemory(new SqliteMemoryService(vectorStore))
-            .WithEmbeddingProvider(embeddingProvider)
+            .WithEmbeddingGenerator(embeddingGenerator)
             .WithVectorStore(vectorStore);
 
         Console.WriteLine(string.IsNullOrWhiteSpace(connString)
@@ -58,8 +57,10 @@ if (useEmbeddings)
     }
     else
     {
-        // Development: in-memory vector store — single convenience call
-        builder = builder.WithSemanticMemory(apiKey);
+        // Development: in-memory vector store
+        var eg = new OpenAI.Embeddings.EmbeddingClient("text-embedding-3-small", apiKey).AsIEmbeddingGenerator();
+        var vs = new InMemoryVectorStore(dimensions: 1536);
+        builder = builder.WithMemory(new SqliteMemoryService(vs)).WithEmbeddingGenerator(eg).WithVectorStore(vs);
         Console.WriteLine("(embeddings enabled with in-memory vector store)");
     }
 }
@@ -81,5 +82,5 @@ while (true)
         break;
 
     var reply = await assistant.ReplyAsync(input);
-    Console.WriteLine($"Assistant: {reply.Content}\n");
+    Console.WriteLine($"Assistant: {reply}\n");
 }

@@ -1,6 +1,6 @@
 using Agentic.Builder;
 using Agentic.Core;
-using Agentic.Providers.OpenAi;
+using Microsoft.Extensions.AI;
 using RateLimitingMiddlewareSample;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
@@ -17,8 +17,8 @@ Console.WriteLine("╚═══════════════════�
 
 // Create an agent with rate limiting (5 requests per minute for demo)
 var agent = new AgentBuilder()
-    .WithOpenAi(apiKey)
-    .UseMiddleware(new RateLimitingMiddleware(maxRequestsPerMinute: 5))
+    .WithChatClient(new OpenAI.Chat.ChatClient("gpt-4o-mini", apiKey).AsIChatClient())
+    .WithMiddleware(new RateLimitingMiddleware(maxRequestsPerMinute: 5))
     .Build();
 
 await agent.InitializeAsync();
