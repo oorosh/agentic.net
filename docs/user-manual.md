@@ -14,7 +14,7 @@
 10. [Agent identity with SOUL.md](#10-agent-identity-with-soulmd)
 11. [Agent skills](#11-agent-skills)
 12. [Semantic memory with embeddings](#12-semantic-memory-with-embeddings)
-13. [Custom model providers](#13-custom-model-providers)
+13. [Custom chat clients](#13-custom-chat-clients)
 14. [OpenTelemetry observability](#14-opentelemetry-observability)
 15. [AgentBuilder reference](#15-agentbuilder-reference)
 16. [Namespace reference](#16-namespace-reference)
