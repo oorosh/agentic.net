@@ -33,13 +33,13 @@ jobs:
         run: dotnet restore Agentic.NET.sln
 
       - name: Build
-        run: dotnet build Agentic.NET.csproj -c Release --no-restore
+        run: dotnet build src/Agentic.NET/Agentic.NET.csproj -c Release --no-restore
 
       - name: Test
-        run: dotnet test tests/Agentic.Tests/Agentic.Tests.csproj -c Release --no-restore --nologo
+        run: dotnet test src/Agentic.Tests/Agentic.Tests.csproj -c Release --no-restore --nologo
 
       - name: Pack
-        run: dotnet pack Agentic.NET.csproj -c Release --no-build -o artifacts
+        run: dotnet pack src/Agentic.NET/Agentic.NET.csproj -c Release --no-build -o artifacts
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
