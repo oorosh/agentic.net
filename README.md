@@ -575,3 +575,26 @@ Pass images and other content types through to MEAI providers that support them 
 - `src/Agentic.NET/` — library source (Abstractions, Builder, Core, Loaders, Middleware, Stores)
 - `src/Agentic.Tests/` — unit tests
 - `samples/` — runnable usage examples
+
+## Contributing
+
+Contributions are welcome! Here's how to get started:
+
+1. **Fork** the repository and clone your fork locally.
+2. **Create a branch** for your change: `git checkout -b my-feature`.
+3. **Make your changes** — follow the code style described in [`AGENTS.md`](AGENTS.md) (file-scoped namespaces, `sealed` classes by default, nullable enabled, etc.).
+4. **Add or update tests** in `src/Agentic.Tests/` for any new behaviour.
+5. **Build and test** to make sure everything passes:
+   ```bash
+   dotnet build src/Agentic.NET/Agentic.NET.csproj
+   dotnet test src/Agentic.Tests/Agentic.Tests.csproj -c Release
+   ```
+6. **Open a pull request** against `main` with a clear description of what you changed and why.
+
+### Good first contributions
+- Adding a new `IVectorStore` implementation (Azure AI Search, Qdrant, Pinecone, …)
+- Adding a new sample under `samples/`
+- Picking up an item from the [Roadmap](#roadmap)
+- Improving documentation or fixing typos
+
+Please open an issue first if you plan a large or breaking change — it helps avoid duplicated effort.
