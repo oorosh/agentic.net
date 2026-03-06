@@ -1,8 +1,9 @@
 # Agentic.NET NuGet Package
 
-Create AI assistants in .NET with pluggable models, memory, middleware, and
-tool calling. Agentic.NET gives you a small runtime to compose assistant
-workflows without coupling your app to a single provider.
+Build production-ready AI agents in .NET — CLI coding assistants, web chat bots,
+or autonomous agents like an OpenClaw-style computer-use agent. Agentic.NET
+handles the agent runtime (memory, tool calling, streaming, middleware,
+identity) so you can focus on your UI and app integrations.
 
 This README is kept short for NuGet users; full documentation and samples are
 available in the GitHub repository.
