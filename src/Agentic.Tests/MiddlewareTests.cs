@@ -8,7 +8,6 @@ using Agentic.Builder;
 using Agentic.Core;
 using Agentic.Middleware;
 using Agentic.Tests.Fakes;
-using Agentic.Core;
 using Xunit;
 
 namespace Agentic.Tests;
@@ -29,9 +28,9 @@ public sealed class MiddlewareTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new EchoModel()))
-            .UseMiddleware(mw1)
-            .UseMiddleware(mw2)
-            .UseMiddleware(mw3)
+            .WithMiddleware(mw1)
+            .WithMiddleware(mw2)
+            .WithMiddleware(mw3)
             .Build();
 
         await agent.ReplyAsync("test");
@@ -55,7 +54,7 @@ public sealed class MiddlewareTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new EchoModel()))
-            .UseMiddleware(middleware)
+            .WithMiddleware(middleware)
             .Build();
 
         await agent.ReplyAsync("test");
@@ -73,8 +72,8 @@ public sealed class MiddlewareTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new EchoModel()))
-            .UseMiddleware(mw1)
-            .UseMiddleware(mw2)
+            .WithMiddleware(mw1)
+            .WithMiddleware(mw2)
             .Build();
 
         await agent.ReplyAsync("hello");
@@ -92,7 +91,7 @@ public sealed class MiddlewareTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new EchoModel()))
-            .UseMiddleware(middleware)
+            .WithMiddleware(middleware)
             .Build();
 
         await agent.ReplyAsync("hello world");
@@ -114,7 +113,7 @@ public sealed class MiddlewareTests
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new EchoModel()))
             .WithMemory(memory)
-            .UseMiddleware(middleware)
+            .WithMiddleware(middleware)
             .Build();
 
         await agent.ReplyAsync("test");
@@ -134,7 +133,7 @@ public sealed class MiddlewareTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new EchoModel()))
-            .UseMiddleware(middleware)
+            .WithMiddleware(middleware)
             .Build();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => agent.ReplyAsync("test"));
@@ -147,7 +146,7 @@ public sealed class MiddlewareTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new NeverCalledModel()))
-            .UseMiddleware(middleware)
+            .WithMiddleware(middleware)
             .Build();
 
         var response = await agent.ReplyAsync("test");
@@ -165,8 +164,8 @@ public sealed class MiddlewareTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new EchoModel()))
-            .UseMiddleware(mw1)
-            .UseMiddleware(mw2)
+            .WithMiddleware(mw1)
+            .WithMiddleware(mw2)
             .Build();
 
         await agent.ReplyAsync("test");
@@ -187,7 +186,7 @@ public sealed class MiddlewareTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new EchoModel()))
-            .UseMiddleware(middleware)
+            .WithMiddleware(middleware)
             .Build();
 
         await agent.ReplyAsync("first");

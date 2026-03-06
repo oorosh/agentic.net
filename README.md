@@ -542,6 +542,34 @@ Samples that use OpenAI require the following environment variables:
 
 Most applications only need `Agentic.Builder` and `Microsoft.Extensions.AI` (plus the MEAI provider package). Tools additionally need `Agentic.Abstractions` and `Agentic.Core`.
 
+## Roadmap
+
+The following capabilities are planned for upcoming releases, roughly in priority order:
+
+### 🔌 MCP (Model Context Protocol) support
+Connect the agent to any MCP server to pull tools and resources dynamically. This unlocks the entire MCP ecosystem — file systems, databases, browsers, APIs — without writing a single `ITool` manually.
+
+### 🤝 Multi-agent orchestration
+Runtime support for agent handoffs defined in SOUL.md. One agent delegates work to another and receives results back — the foundation for building systems like a CLI coding assistant backed by specialist sub-agents.
+
+### 📄 RAG / document ingestion pipeline
+A document ingestion API (chunking, embedding, indexing) so agents can answer questions against external knowledge bases — PDFs, web pages, code repos — not just conversation history.
+
+### 💬 Conversation management
+Automatic context-window management: configurable summarization or sliding-window pruning so long-running chat bots never silently hit token limits.
+
+### 🗄️ SQLite-vec vector store
+A built-in `SqliteVecVectorStore` so semantic memory works with zero extra infrastructure — no Postgres required. Natural companion to the existing SQLite memory service.
+
+### 🧱 Structured output
+A `WithStructuredOutput<T>()` builder method that instructs the model to return JSON matching a schema and deserializes it automatically into a typed result.
+
+### 🔁 Resilience middleware
+Built-in retry and rate-limiting middleware for transient LLM errors, with configurable back-off policies.
+
+### 🖼️ Multimodal input
+Pass images and other content types through to MEAI providers that support them (vision models, document understanding).
+
 ## Repository layout
 
 - `src/Agentic.NET/` — library source (Abstractions, Builder, Core, Loaders, Middleware, Stores)

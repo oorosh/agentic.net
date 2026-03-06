@@ -240,7 +240,7 @@ public sealed class StreamingTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new MultiTokenModel(["hi"])))
-            .UseMiddleware(middleware)
+            .WithMiddleware(middleware)
             .Build();
 
         await agent.InitializeAsync();
@@ -260,9 +260,9 @@ public sealed class StreamingTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new MultiTokenModel(["ok"])))
-            .UseMiddleware(mw1)
-            .UseMiddleware(mw2)
-            .UseMiddleware(mw3)
+            .WithMiddleware(mw1)
+            .WithMiddleware(mw2)
+            .WithMiddleware(mw3)
             .Build();
 
         await agent.InitializeAsync();
@@ -281,7 +281,7 @@ public sealed class StreamingTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new MultiTokenModel(["a", "b"])))
-            .UseMiddleware(passThrough)
+            .WithMiddleware(passThrough)
             .Build();
 
         await agent.InitializeAsync();
@@ -301,7 +301,7 @@ public sealed class StreamingTests
 
         var agent = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new MultiTokenModel(["should-not-appear"])))
-            .UseMiddleware(middleware)
+            .WithMiddleware(middleware)
             .Build();
 
         await agent.InitializeAsync();

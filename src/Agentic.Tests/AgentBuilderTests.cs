@@ -49,8 +49,8 @@ public class AgentBuilderTests
         var assistant = new AgentBuilder()
             .WithChatClient(new FakeChatClient(new TestAgentModel()))
             .WithMemory(memory)
-            .UseMiddleware(mw1)
-            .UseMiddleware(mw2)
+            .WithMiddleware(mw1)
+            .WithMiddleware(mw2)
             .Build();
 
         await assistant.ReplyAsync("foo");
