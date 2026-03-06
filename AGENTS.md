@@ -16,13 +16,13 @@ Agentic.NET is a .NET library for creating AI assistants with pluggable models, 
 dotnet restore Agentic.NET.sln
 
 # Build the library (Debug)
-dotnet build Agentic.NET.csproj
+dotnet build src/Agentic.NET/Agentic.NET.csproj
 
 # Build in Release mode
-dotnet build Agentic.NET.csproj -c Release
+dotnet build src/Agentic.NET/Agentic.NET.csproj -c Release
 
 # Pack NuGet package
-dotnet pack Agentic.NET.csproj -c Release -o artifacts
+dotnet pack src/Agentic.NET/Agentic.NET.csproj -c Release -o artifacts
 
 # Build a sample
 dotnet run --project samples/BasicChat/BasicChat.csproj
@@ -32,13 +32,13 @@ dotnet run --project samples/BasicChat/BasicChat.csproj
 
 ```bash
 # Run all tests
-dotnet test tests/Agentic.Tests/Agentic.Tests.csproj -c Release
+dotnet test src/Agentic.Tests/Agentic.Tests.csproj -c Release
 
 # Run a single test by name
-dotnet test tests/Agentic.Tests/Agentic.Tests.csproj --filter "FullyQualifiedName~AgentBuilderTests.Build_throws_when_model_provider_missing"
+dotnet test src/Agentic.Tests/Agentic.Tests.csproj --filter "FullyQualifiedName~AgentBuilderTests.Build_throws_when_model_provider_missing"
 
 # Run tests with verbose output
-dotnet test tests/Agentic.Tests/Agentic.Tests.csproj -c Release -v n
+dotnet test src/Agentic.Tests/Agentic.Tests.csproj -c Release -v n
 ```
 
 ## Code Style Guidelines
@@ -96,15 +96,19 @@ dotnet test tests/Agentic.Tests/Agentic.Tests.csproj -c Release -v n
 ### Project Structure
 
 ```
-Agentic.NET/
-├── Abstractions/     # Interfaces and contracts (ITool, IMemoryService, etc.)
-├── Builder/           # AgentBuilder fluent API
-├── Core/             # Runtime types (Agent, AgentContext, ChatMessage)
-├── Loaders/          # Skill and SOUL document loaders
-├── Middleware/       # Middleware contracts and implementations
-├── Stores/           # Vector store implementations (PgVector, InMemory)
-├── samples/          # Usage examples
-└── tests/            # Unit tests
+agentic.net/
+├── src/
+│   ├── Agentic.NET/      # Library
+│   │   ├── Abstractions/ # Interfaces and contracts (ITool, IMemoryService, etc.)
+│   │   ├── Builder/      # AgentBuilder fluent API
+│   │   ├── Core/         # Runtime types (Agent, AgentContext, ChatMessage)
+│   │   ├── Loaders/      # Skill and SOUL document loaders
+│   │   ├── Middleware/   # Middleware contracts and implementations
+│   │   ├── Stores/       # Vector store implementations (PgVector, InMemory)
+│   │   └── Agentic.NET.csproj
+│   └── Agentic.Tests/    # Unit tests
+├── samples/              # Usage examples
+└── Agentic.NET.sln
 ```
 
 ### Key Interfaces

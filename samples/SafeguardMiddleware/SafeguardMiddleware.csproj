@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../Agentic.NET.csproj" />
+    <ProjectReference Include="../../src/Agentic.NET/Agentic.NET.csproj" />
   </ItemGroup>
 
 </Project>

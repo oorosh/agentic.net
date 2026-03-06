@@ -544,11 +544,6 @@ Most applications only need `Agentic.Builder` and `Microsoft.Extensions.AI` (plu
 
 ## Repository layout
 
-- `Abstractions/` contracts and interfaces
-- `Builder/` fluent `AgentBuilder`
-- `Core/` runtime types and built-in memory implementations
-- `Loaders/` skill and SOUL document loaders
-- `Middleware/` middleware contracts and built-in memory middleware
-- `Stores/` vector store implementations (pgvector, in-memory)
-- `samples/` runnable usage examples
-- `tests/` unit tests
+- `src/Agentic.NET/` — library source (Abstractions, Builder, Core, Loaders, Middleware, Stores)
+- `src/Agentic.Tests/` — unit tests
+- `samples/` — runnable usage examples
