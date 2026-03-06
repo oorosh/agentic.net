@@ -53,3 +53,8 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 /.vscode
+
+# Docusaurus
+website/node_modules/
+website/build/
+website/.docusaurus/
