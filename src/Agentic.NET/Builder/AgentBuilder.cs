@@ -4,6 +4,7 @@ using Agentic.Core;
 using Agentic.Loaders;
 using Agentic.Middleware;
 using Microsoft.Extensions.AI;
+using ModelContextProtocol.Client;
 
 namespace Agentic.Builder;
 
@@ -21,6 +22,8 @@ public sealed class AgentBuilder
     private HeartbeatOptions? _heartbeatOptions;
     private readonly List<IAssistantMiddleware> _middlewares = [];
     private readonly List<ITool> _tools = [];
+    private readonly List<IClientTransport> _mcpTransports = [];
+    private readonly List<McpClient> _mcpClients = [];
 
     public AgentBuilder WithChatClient(IChatClient chatClient)
     {
@@ -218,6 +221,44 @@ public sealed class AgentBuilder
     public AgentBuilder WithToolsFromCallingAssembly()
         => WithToolsFromAssembly(Assembly.GetCallingAssembly());
 
+    /// <summary>
+    /// Connects to an MCP server using the provided transport. Tools are discovered and registered
+    /// when the agent is initialized via <see cref="IAgent.InitializeAsync"/>.
+    /// </summary>
+    public AgentBuilder WithMcpServer(IClientTransport transport)
+    {
+        _mcpTransports.Add(transport ?? throw new ArgumentNullException(nameof(transport)));
+        return this;
+    }
+
+    /// <summary>
+    /// Connects to an MCP server via stdio using the specified options.
+    /// </summary>
+    public AgentBuilder WithMcpServer(StdioClientTransportOptions options)
+        => WithMcpServer(new StdioClientTransport(options ?? throw new ArgumentNullException(nameof(options))));
+
+    /// <summary>
+    /// Connects to an MCP server via HTTP/SSE at the specified endpoint URI.
+    /// </summary>
+    public AgentBuilder WithMcpServer(Uri endpoint)
+        => WithMcpServer(new HttpClientTransportOptions { Endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint)) });
+
+    /// <summary>
+    /// Connects to an MCP server via HTTP using the specified transport options.
+    /// </summary>
+    public AgentBuilder WithMcpServer(HttpClientTransportOptions options)
+        => WithMcpServer(new HttpClientTransport(options ?? throw new ArgumentNullException(nameof(options))));
+
+    /// <summary>
+    /// Registers an already-connected <see cref="McpClient"/>. Tools are discovered when the agent
+    /// is initialized. The caller is responsible for the client's lifetime.
+    /// </summary>
+    public AgentBuilder WithMcpClient(McpClient client)
+    {
+        _mcpClients.Add(client ?? throw new ArgumentNullException(nameof(client)));
+        return this;
+    }
+
     private static string GetEffectiveToolName(ITool tool)
     {
         var attr = tool.GetType().GetCustomAttribute<AgenticToolAttribute>(inherit: false);
@@ -287,6 +328,8 @@ public sealed class AgentBuilder
             _skillLoader,
             _soulLoader,
             _soulLearningCallback,
-            _heartbeatOptions);
+            _heartbeatOptions,
+            _mcpTransports,
+            _mcpClients);
     }
 }

@@ -5,8 +5,10 @@ using System.Security.Cryptography;
 using System.Text;
 using Agentic.Abstractions;
 using Agentic.Loaders;
+using Agentic.Mcp;
 using Agentic.Middleware;
 using Microsoft.Extensions.AI;
+using ModelContextProtocol.Client;
 
 namespace Agentic.Core;
 
@@ -18,10 +20,15 @@ public sealed class Agent : IAgent, IAsyncDisposable
     private readonly IEmbeddingGenerator<string, Embedding<float>>? _embeddingGenerator;
     private readonly IAssistantContextFactory _contextFactory;
     private readonly IReadOnlyList<IAssistantMiddleware> _middlewares;
-    private readonly IReadOnlyDictionary<string, ITool> _tools;
+    private readonly Dictionary<string, ITool> _tools;
     private readonly ISkillLoader? _skillLoader;
     private readonly ISoulLoader? _soulLoader;
     private readonly Func<string, string, SoulDocument, SoulDocument?>? _soulLearningCallback;
+    private readonly IReadOnlyList<IClientTransport> _mcpTransports;
+    // Clients created from _mcpTransports — owned and disposed by this Agent.
+    private readonly List<McpClient> _ownedMcpClients = [];
+    // Clients passed in by the caller via WithMcpClient() — NOT owned or disposed by this Agent.
+    private readonly IReadOnlyList<McpClient> _externalMcpClients;
     private readonly List<ChatMessage> _history = [];
     // Fix 3: cache ToolParameterMetadata per tool type to avoid repeated reflection
     private static readonly ConcurrentDictionary<Type, IReadOnlyList<IToolParameterMetadata>> ParameterMetadataCache = new();
@@ -42,11 +49,13 @@ public sealed class Agent : IAgent, IAsyncDisposable
         IEmbeddingGenerator<string, Embedding<float>>? embeddingGenerator,
         IAssistantContextFactory contextFactory,
         IReadOnlyList<IAssistantMiddleware> middlewares,
-        IReadOnlyDictionary<string, ITool> tools,
+        Dictionary<string, ITool> tools,
         ISkillLoader? skillLoader = null,
         ISoulLoader? soulLoader = null,
         Func<string, string, SoulDocument, SoulDocument?>? soulLearningCallback = null,
-        HeartbeatOptions? heartbeatOptions = null)
+        HeartbeatOptions? heartbeatOptions = null,
+        IReadOnlyList<IClientTransport>? mcpTransports = null,
+        IReadOnlyList<McpClient>? mcpClients = null)
     {
         _model = model;
         _memoryService = memoryService;
@@ -57,6 +66,8 @@ public sealed class Agent : IAgent, IAsyncDisposable
         _skillLoader = skillLoader;
         _soulLoader = soulLoader;
         _soulLearningCallback = soulLearningCallback;
+        _mcpTransports = mcpTransports ?? [];
+        _externalMcpClients = mcpClients ?? [];
         // Heartbeat service is constructed here so it can safely reference `this`.
         Heartbeat = heartbeatOptions is not null
             ? new AgentHeartbeatService(this, heartbeatOptions)
@@ -92,6 +103,8 @@ public sealed class Agent : IAgent, IAsyncDisposable
         {
             _soul = await _soulLoader.LoadSoulAsync(cancellationToken);
         }
+
+        await ConnectMcpServersAsync(cancellationToken);
 
         _soulAndSkillsMessage = BuildSoulAndSkillsMessage(_soul, _skills);
         _initialized = true;
@@ -545,5 +558,45 @@ public sealed class Agent : IAgent, IAsyncDisposable
             await asyncDisposableEmbedding.DisposeAsync();
         else if (_embeddingGenerator is IDisposable disposableEmbedding)
             disposableEmbedding.Dispose();
+
+        foreach (var mcpClient in _ownedMcpClients)
+        {
+            await mcpClient.DisposeAsync();
+        }
+    }
+
+    private async Task ConnectMcpServersAsync(CancellationToken cancellationToken)
+    {
+        // Register tools from transports (we own these clients).
+        foreach (var transport in _mcpTransports)
+        {
+            var client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
+            _ownedMcpClients.Add(client);
+            await RegisterMcpToolsAsync(client, cancellationToken);
+        }
+
+        // Register tools from pre-connected clients (caller owns these).
+        foreach (var client in _externalMcpClients)
+        {
+            await RegisterMcpToolsAsync(client, cancellationToken);
+        }
+    }
+
+    private async Task RegisterMcpToolsAsync(McpClient client, CancellationToken cancellationToken)
+    {
+        var mcpTools = await client.ListToolsAsync(cancellationToken: cancellationToken);
+
+        foreach (var mcpTool in mcpTools)
+        {
+            var adapter = new McpToolAdapter(mcpTool);
+            if (!_tools.TryAdd(adapter.Name, adapter))
+            {
+                throw new InvalidOperationException(
+                    $"Tool '{adapter.Name}' from MCP server conflicts with an already-registered tool.");
+            }
+        }
+
+        // Invalidate the cached tool catalog so it includes the newly registered MCP tools.
+        _toolCatalogMessage = null;
     }
 }

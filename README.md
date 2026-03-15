@@ -155,6 +155,72 @@ Manual `WithTool()` and auto-discovery can be freely mixed. The attribute also a
 public sealed class WeatherToolV2 : ITool { ... }
 ```
 
+## MCP (Model Context Protocol)
+
+Connect the agent to any [MCP](https://modelcontextprotocol.io/) server and its tools are automatically discovered and registered — no manual `ITool` implementation needed. This unlocks the entire MCP ecosystem: file systems, databases, browsers, APIs, and thousands of community servers.
+
+### Connecting to an MCP server
+
+**Stdio server** (most common — spawns a local process):
+
+```csharp
+using ModelContextProtocol.Client;
+
+var agent = new AgentBuilder()
+    .WithChatClient(chatClient)
+    .WithMcpServer(new StdioClientTransportOptions
+    {
+        Name = "filesystem",
+        Command = "npx",
+        Arguments = ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    })
+    .Build();
+
+await agent.InitializeAsync();  // connects and discovers tools here
+```
+
+**HTTP / SSE server**:
+
+```csharp
+var agent = new AgentBuilder()
+    .WithChatClient(chatClient)
+    .WithMcpServer(new Uri("http://localhost:3001"))
+    .Build();
+```
+
+**Pre-connected client** (you control the lifetime):
+
+```csharp
+await using var mcpClient = await McpClient.CreateAsync(transport);
+
+var agent = new AgentBuilder()
+    .WithChatClient(chatClient)
+    .WithMcpClient(mcpClient)   // agent uses it but does not dispose it
+    .Build();
+```
+
+### How it works
+
+- Tools are discovered lazily when `InitializeAsync()` is called — no blocking in the constructor.
+- Each MCP tool is wrapped as an `ITool` and mixed in with any natively registered tools.
+- The MCP tool's JSON schema is embedded in its description, so the LLM receives accurate parameter guidance.
+- `McpClient` instances created from transports (via `WithMcpServer`) are owned by the agent and disposed with it.
+
+### Multiple servers
+
+```csharp
+var agent = new AgentBuilder()
+    .WithChatClient(chatClient)
+    .WithMcpServer(stdioTransportOptions)              // file system tools
+    .WithMcpServer(new Uri("http://localhost:3002"))   // web search tools
+    .WithTool(new MyCustomTool())                      // native tool — freely mixed
+    .Build();
+```
+
+### Sample
+
+See `samples/McpServer` for a self-contained runnable example with an in-process demo server.
+
 ## Bring your own model
 
 Agentic.NET accepts any `IChatClient` from `Microsoft.Extensions.AI`. Use any MEAI-compatible provider:
@@ -356,6 +422,14 @@ OPENAI_API_KEY=your_key dotnet run --project samples/ProactiveAssistant/Proactiv
 
 **See:** [Heartbeat guide](docs/heartbeat.md)
 
+### MCP Server (`samples/McpServer`)
+
+Demonstrates connecting an agent to an MCP server. Uses an in-process demo server (no external process needed) with three example tools: `echo`, `celsius_to_fahrenheit`, and `word_count`. Includes commented-out snippets showing real-world stdio and HTTP connection patterns.
+
+```bash
+dotnet run --project samples/McpServer/McpServer.csproj
+```
+
 ### Middleware Examples
 
 Agentic.NET includes several focused middleware samples demonstrating different patterns and use cases:
@@ -545,9 +619,6 @@ Most applications only need `Agentic.Builder` and `Microsoft.Extensions.AI` (plu
 ## Roadmap
 
 The following capabilities are planned for upcoming releases, roughly in priority order:
-
-### 🔌 MCP (Model Context Protocol) support
-Connect the agent to any MCP server to pull tools and resources dynamically. This unlocks the entire MCP ecosystem — file systems, databases, browsers, APIs — without writing a single `ITool` manually.
 
 ### 🤝 Multi-agent orchestration
 Runtime support for agent handoffs defined in SOUL.md. One agent delegates work to another and receives results back — the foundation for building systems like a CLI coding assistant backed by specialist sub-agents.

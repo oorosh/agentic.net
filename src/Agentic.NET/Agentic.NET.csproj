@@ -10,7 +10,7 @@
     <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/$(TargetFramework)/</IntermediateOutputPath>
     <IsPackable>true</IsPackable>
     <!-- use a prerelease version to keep the package in "preview" state -->
-    <Version>0.2.1-preview</Version>
+    <Version>0.3.0-preview</Version>
     <Authors>Uros Biberdzic</Authors>
     <Description>Create AI assistants in .NET with pluggable models, memory, middleware, and tools.</Description>
     <PackageProjectUrl>https://github.com/oorosh/agentic.net</PackageProjectUrl>
@@ -50,6 +50,7 @@ Improvements:
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.3.0" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.3.0" />
+    <PackageReference Include="ModelContextProtocol.Core" Version="1.1.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
     <PackageReference Include="Npgsql" Version="8.0.5" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.11.2" />

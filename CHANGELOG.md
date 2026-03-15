@@ -2,6 +2,26 @@
 
 All notable changes to Agentic.NET are documented here.
 
+## [0.3.0-preview] - 2026-03-15
+
+### Added
+- **MCP (Model Context Protocol) support** — connect any MCP server as a tool source
+  - `AgentBuilder.WithMcpServer(IClientTransport)` — lazily connects at `InitializeAsync()`
+  - `AgentBuilder.WithMcpServer(StdioClientTransportOptions)` — stdio server convenience overload
+  - `AgentBuilder.WithMcpServer(Uri)` — HTTP/SSE server convenience overload
+  - `AgentBuilder.WithMcpServer(HttpClientTransportOptions)` — HTTP with full options
+  - `AgentBuilder.WithMcpClient(McpClient)` — pre-connected client (caller owns lifetime)
+  - All MCP tools auto-discovered on `InitializeAsync()` and registered as `ITool`
+  - MCP tools expose their JSON schema in the description so the LLM gets correct parameter guidance
+  - Owned `McpClient` instances are disposed with the agent via `IAsyncDisposable`
+  - Conflicts between MCP tool names and pre-registered tools throw `InvalidOperationException`
+- **New sample** — `samples/McpServer`: self-contained in-process MCP server + agent demo with commented-out snippets for stdio and HTTP real-world servers
+
+### Changed
+- `ModelContextProtocol.Core` 1.1.0 added as a dependency (official C# MCP SDK, minimal package with no hosting overhead)
+
+---
+
 ## [0.2.1-preview] - 2026-03-06
 
 ### Fixed
